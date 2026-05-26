@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 import os
@@ -7,12 +8,22 @@ from dotenv import load_dotenv
 import datetime
 from .models import Faqs, Tickets
 from .routes.auth import router as auth_router
+from .routes.users import router as user_router
 
 load_dotenv()
 
 app = FastAPI()
 
 app.include_router(auth_router)
+app.include_router(user_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # your frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 db_url = os.getenv("database_url")
 
@@ -46,16 +57,6 @@ async def fetch_faq_with_keyword(keyword, session: SessionDep) -> list[Faqs]:
     return faqs
 
 
-@app.post("/ticket")
-async def add_ticket(ticket:Tickets, session: SessionDep) -> None:
-    with Session(engine) as session:
-        tkt_ref = f"TKT-{nanoid.generate(size=8)}"
-        # while(tkt_id)
-        #     tkt_id = f"TKT-{nanoid.generate(size=8)}"
-        ticket.ticket_ref = tkt_ref
-
-        session.add(ticket)
-        session.commit()
 
 
     

@@ -1,17 +1,16 @@
 from ..database import SessionDep
 from pydantic import BaseModel
 from ..models import Users
-from sqlmodel import col, func, select
-from fastapi import APIRouter, Form, Response, Cookie, status, HTTPException, Depends
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Annotated
+from sqlmodel import func, select, update
+from fastapi import APIRouter, Response, Cookie, status, HTTPException
+from fastapi.security import OAuth2PasswordBearer
 from datetime import datetime, timedelta, timezone
 from pwdlib import PasswordHash
 import os
 from dotenv import load_dotenv
-from jwt.exceptions import InvalidTokenError
-from authlib.jose import JsonWebEncryption
-import json
+import jwt
+import uuid
+import random
 
 load_dotenv()
 
@@ -29,19 +28,25 @@ class SignUpForm(BaseModel):
     full_name: str
     email: str
     password: str
+    agree_to_terms: bool = False
+    remember_me: bool = False
     model_config = {"extra" : "forbid"}
 
 class LoginForm(BaseModel):
     email: str
     password: str
+    remember_me: bool = False
     model_config = {"extra" : "forbid"}
 
+class UserData(BaseModel):#Sent to the frontend. All variables in frontend are camelCase
+    fullName: str
+    email: str
 
 class TokenData(BaseModel):
     full_name: str
-    email: str
-
-
+    uuid: uuid.UUID
+    email:str
+    role: str
 
 def verify_password(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
@@ -49,78 +54,137 @@ def verify_password(plain_password, hashed_password):
 
 def create_access_token(token_data: TokenData, expires_delta: timedelta | None = None):
     payload = {
-        "sub": token_data.full_name,
-        "email": token_data.email
+        "sub": str(token_data.uuid),
+        "full_name": token_data.full_name,
+        "email": token_data.email,
+        "role": token_data.role
     }
+    print("the problem is not here")
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=access_token_expire_minutes)
 
-    payload.update({"exp": expire})
-    payload_bytes = json.dumps(payload).encode("utf-8")
-    protected_header = {'alg': 'dir', 'enc': 'A256GCM'}
-    jwe_token = JsonWebEncryption.serialize_compact(protected_header, payload_bytes, secret_key)
+    expire_timestamp = int(expire.timestamp())
 
-    return jwe_token
+    payload.update({"exp": expire_timestamp})
+
+    access_token = jwt.encode(payload=payload, key=secret_key, algorithm=ALGORITHM)
+    print("the problem is not here22")
 
 
-def get_current_user(token:str):
+    return access_token
+
+
+
+def authenticate_user(login:LoginForm, session: SessionDep) -> TokenData:
     try:
-        # 2. Decrypt the JWE token locally
-        _, decrypted_bytes = JsonWebEncryption.deserialize_compact(token, secret_key)
-        user_data = json.loads(decrypted_bytes.decode("utf-8"))
+        user = session.exec(select(Users).where(Users.email == login.email)).one()
+        if not user:
+            return None
+        if verify_password(login.password, user.password_hash):
+            return TokenData(full_name=user.full_name, uuid=user.user_id, email=user.email,role=user.user_role)
+        return None
+    except Exception:
+        return None
+    
+def get_hashed_password(password:str):
+    return password_hash.hash(password)
+
+async def get_uuid(support_session: str = Cookie(None)):
+    if support_session is None:
+        print("Cookie not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication cookie missing. Please log in."
+        )
+    try:
+        user_data = jwt.decode(support_session, secret_key, algorithms=[ALGORITHM])
+        current_time = int(datetime.now(timezone.utc).timestamp())
+
+        if user_data.get("exp") and current_time > user_data.get("exp"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired. Please log in."
+            )
+
+        return user_data.get("sub")
+    
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or corrupted session token. Please log in."
+        )
+
+#Send user's details when requested with cookie having jwt token
+@router.get("/me")
+def get_current_user(support_session: str = Cookie(None)):
+    # 1. Check if the browser actually sent the cookie
+    if support_session is None:
+        print("Cookie not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication cookie missing. Please log in."
+        )
+    try:
+        user_data = jwt.decode(support_session, secret_key, algorithms=[ALGORITHM])
         
         # 3. Return the private data safely parsed out of the token
-        return {
-            "authenticated": True,
-            "user_id": user_data.get("sub"),
-            "email": user_data.get("email"),
-            "role": user_data.get("role")
-        }
+        print(user_data)
+        current_time = int(datetime.now(timezone.utc).timestamp())
+
+        if user_data.get("exp") and current_time > user_data.get("exp"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired. Please log in."
+            )
+
+        user = UserData(fullName=user_data.get("full_name"),email=user_data.get("email"))
+        return {"user": user}
+
         
-    except Exception:
+    except Exception as e:
         # If the token was tampered with, expired, or encrypted with a different key
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or corrupted session token."
         )
 
-
-def authenticate_user(login:LoginForm, session: SessionDep) -> TokenData:
-    user = session.exec(select(Users).where(Users.email == login.email)).one()
-    if not user:
-        return None
-    if verify_password(login.password, user.password_hash):
-        return TokenData(user.full_name, user.email)
-    return None
-
-
-
+#Sign up the user insert details in database and send a secure JWE cookie
 @router.post("/signup", status_code=200)
-async def signup(user: Annotated[SignUpForm, Form()],response:Response, session: SessionDep): # type: ignore
+async def signup(user: SignUpForm, response:Response, session: SessionDep):
+    if not user.agree_to_terms:
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return {"message": "Not agreed to terms"}
+    
     try:
         count = session.exec(select(func.count()).select_from(Users).where(Users.email == user.email)).one()
         #if email already exists
         if(count > 0):
             response.status_code = status.HTTP_409_CONFLICT
             return {"message": "Account with email already exists"}
-
-        hashed_password = password_hash.hash(user.password)
+        
+        hashed_password = get_hashed_password(user.password)
 
         user1 = Users(full_name=user.full_name,email=user.email,password_hash=hashed_password)
-
+        print(user1)
         #Inserting user into the users table
         session.add(user1)
-        session.commit()
 
-        token_data = TokenData(user1.full_name, user1.email)
+        token_data = TokenData(full_name=user1.full_name, uuid=user1.user_id, email=user1.email, role=user1.user_role)
 
         access_token = create_access_token(token_data)
+        age = 3600
+        if user.remember_me:
+            print("Remeber for 30 days")
+            age *= 24*30
+
 
         response.set_cookie(
             key=cookie_name,
-            value=access_token.decode("utf-8"),
+            value=access_token,
             httponly=True,
             secure=True,
             samesite="lax",
@@ -128,17 +192,23 @@ async def signup(user: Annotated[SignUpForm, Form()],response:Response, session:
             path="/"
         )
 
-        return {"message": "Signup and Login successful"}
+        user = UserData(fullName=user1.full_name, email=user1.email)
+
+        session.commit()
+
+        return {"message": "Successful", "user": user}
     
     except Exception as e:
         print(e)
         response.status_code = 500
         return {"message": "Server Error"}
-
+    
+#Login User and send JWE token as a secure cookie
 @router.post("/login", status_code=200)
-async def login(loginForm: Annotated[LoginForm, Form()] | None, response: Response, session:SessionDep, support_session: str = Cookie(None)):
+async def login(loginForm: LoginForm, response: Response, session:SessionDep):
     #user's name stored in result if user is authenticated
     token_data = authenticate_user(loginForm, session)
+
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -148,18 +218,24 @@ async def login(loginForm: Annotated[LoginForm, Form()] | None, response: Respon
     
     else:
         access_token = create_access_token(token_data)
+        age = 3600
+        if loginForm.remember_me:
+            print("Remeber for 30 days")
+            age *= 24*30
 
         response.set_cookie(
             key=cookie_name,
-            value=access_token.decode("utf-8"),
+            value=access_token,
             httponly=True,
             secure=True,
             samesite="lax",
-            max_age=3600,
+            max_age=age,
             path="/"
         )
 
-        return {"message": "Signup and Login successful"}
+        user = UserData(fullName= token_data.full_name, email= token_data.email)
+
+        return {"message": "Successful", "user": user}
 
 
 @router.post("/logout")
@@ -169,3 +245,20 @@ def logout(response: Response):
     """
     response.delete_cookie(key=cookie_name, path="/")
     return {"message": "Logged out successfully."}
+
+
+@router.delete("/del-acc")
+async def del_account(session:SessionDep, response:Response, support_session:str = Cookie(None)):
+    user_uuid = await get_uuid(support_session=support_session)
+    anonymized_acc_name = "deleted_"+ str(random.randrange(1,10000000))
+    anonymized_email = anonymized_acc_name + "@gmail.com"
+    user1 = session.exec(select(Users).where(Users.user_id == user_uuid)).one() #.values(full_name=anonymized_acc_name, email=anonymized_email), is_deleted=True)
+    user1.full_name = anonymized_acc_name
+    user1.email = anonymized_email
+    user1.is_deleted = True
+    session.add(user1)
+    session.commit()
+    session.refresh(user1)
+    print(user1)
+    response.delete_cookie(key=cookie_name, path="/")
+    return {"message": "Account deleted successfully."}

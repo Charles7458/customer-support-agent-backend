@@ -1,7 +1,7 @@
 from ..database import SessionDep
 from pydantic import BaseModel
 from ..models import Users
-from sqlmodel import func, select, update
+from sqlmodel import func, select
 from fastapi import APIRouter, Response, Cookie, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from datetime import datetime, timedelta, timezone
@@ -59,7 +59,7 @@ def create_access_token(token_data: TokenData, expires_delta: timedelta | None =
         "email": token_data.email,
         "role": token_data.role
     }
-    print("the problem is not here")
+    
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -70,7 +70,6 @@ def create_access_token(token_data: TokenData, expires_delta: timedelta | None =
     payload.update({"exp": expire_timestamp})
 
     access_token = jwt.encode(payload=payload, key=secret_key, algorithm=ALGORITHM)
-    print("the problem is not here22")
 
 
     return access_token

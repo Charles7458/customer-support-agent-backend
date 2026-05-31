@@ -9,6 +9,7 @@ import datetime
 from .models import Faqs, Tickets
 from .routes.auth import router as auth_router
 from .routes.users import router as user_router
+from .routes.chat import router as chat_router
 
 load_dotenv()
 
@@ -16,6 +17,7 @@ app = FastAPI()
 
 app.include_router(auth_router)
 app.include_router(user_router)
+app.include_router(chat_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +31,8 @@ db_url = os.getenv("database_url")
 
 engine = create_engine(db_url, echo=True)
 
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
 
 def get_session():
     with Session(engine) as session:

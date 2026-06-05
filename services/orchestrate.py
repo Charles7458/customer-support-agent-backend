@@ -1,15 +1,19 @@
 
-from .gemini_agent import client,model,config, get_content, get_final_response_content
+from .gemini_agent import client,model,tool_routing_config, final_json_formatting_config, get_content, get_final_response_content
 from .prompt import generate_prompt
 from .tools import get_faqs, get_orders, create_a_ticket
 from ..routes.auth import get_uuid
 from ..database import SessionDep
+from pydantic import BaseModel
+import json
+from ..models import Tracking, OrderCard, Content, ChatMessages, ChatHistoryResponse, UserRole
+from fastapi import Cookie
 
 
-async def generate_response(text:str, session:SessionDep, support_session:str):
+async def generate_response(text:str, session:SessionDep, support_session:str = Cookie(None)) -> Content:
 
-    uuid = await get_uuid(support_session)
-
+    user_id =  await get_uuid(support_session)
+    print("uuid from orchestrate"+user_id)
     prompt = generate_prompt(text)
 
     contents = get_content(prompt)
@@ -17,7 +21,7 @@ async def generate_response(text:str, session:SessionDep, support_session:str):
     response = client.models.generate_content(
         model=model,
         contents= contents,
-        config=config
+        config=tool_routing_config
     )
 
     # Check for a function call
@@ -32,9 +36,9 @@ async def generate_response(text:str, session:SessionDep, support_session:str):
         if function_call.name == "get_faqs":
             result = get_faqs(keywords = function_call.args["keywords"], session=session)
         elif function_call.name == "get_orders":
-            result = get_orders(user_id=uuid)
+            result = get_orders(user_id=user_id)
         elif function_call.name == "create_a_ticket":
-            result = create_a_ticket(user_id=uuid, issue=function_call.args["issue"],priority=function_call.args["priority"], session=session)
+            result = await create_a_ticket(issue=function_call.args["issue"],priority=function_call.args["priority"], session=session, support_session=support_session)
         
         # Create a function response part
         tool_call = {
@@ -46,8 +50,12 @@ async def generate_response(text:str, session:SessionDep, support_session:str):
 
         final_response = client.models.generate_content(
             model=model,
-            config=config,
+            config=final_json_formatting_config,
             contents=final_response_content,
         )
 
-        return final_response.text
+        print("final_response: \n",final_response)
+        raw_json_str =  final_response.text
+        print(raw_json_str)
+        response_dict = json.loads(raw_json_str)
+        return Content(**response_dict)

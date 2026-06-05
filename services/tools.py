@@ -1,8 +1,9 @@
 from typing import Literal
 from ..database import SessionDep
 from sqlmodel import select
-from ..models import Tickets, Faqs
+from ..models import TicketCreateRequest, Faqs
 from ..routes.tickets import create_ticket
+from fastapi import Cookie
 
 Priority = Literal['low' ,'medium' , 'high']
 
@@ -33,8 +34,8 @@ create_ticket_declaration = {
                     "description": "Issue faced by the user"
                 },
                 "priority" : {
-                    "type": "string",
-                    "description" : "Priority level of the user's issue. Valid values are 'low', 'medium' and 'high'"
+                    "enum" : ["low", "medium", "high"],
+                    "description" : "Priority level of the user's issue based on urgency and impact."
                 }
          },
     "required": ["issue", "priority"]
@@ -74,6 +75,12 @@ def get_faqs(keywords:list[str], session:SessionDep) -> list[Faqs]:
 def get_orders(user_id:str):
     pass
 
-def create_a_ticket(issue:str,priority:Priority, user_id:str, session:SessionDep):
-    ticket = Tickets(issue=issue,priority=priority,status='new', user_id=user_id)
-    create_ticket(ticket,session)
+async def create_a_ticket(issue:str,priority:Priority, session:SessionDep, support_session:str = Cookie(None)):
+    ticket = TicketCreateRequest(issue=issue,priority= priority)
+    try:
+        ticket = await create_ticket(ticket, session, support_session)
+        return ticket.model_dump(mode='json')
+    except Exception as e:
+        print("Gemini agent couldn't create ticket!!!")
+        print(e)
+        return "Couldn't create ticket"

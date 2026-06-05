@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import jwt
 import uuid
 import random
+from enum import Enum
 
 load_dotenv()
 
@@ -22,7 +23,13 @@ cookie_name = "support_session"
 password_hash = PasswordHash.recommended()
 ALGORITHM = os.getenv("ALGORITHM")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+SUPPORT_SECRET = os.getenv("SUPPORT_SECRET")
 
+
+class UserRole(str, Enum):
+    CUSTOMER = "CUSTOMER"
+    SUPPORT_AGENT = "SUPPORT_AGENT"
+    ADMIN = "ADMIN"
 
 class SignUpForm(BaseModel):
     full_name: str
@@ -41,12 +48,19 @@ class LoginForm(BaseModel):
 class UserData(BaseModel):#Sent to the frontend. All variables in frontend are camelCase
     fullName: str
     email: str
+    role: str
 
 class TokenData(BaseModel):
     full_name: str
     uuid: uuid.UUID
     email:str
     role: str
+
+class SupportLogin(LoginForm):
+    support_secret: str
+
+class SupportSignup(SignUpForm):
+    support_secret: str
 
 def verify_password(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
@@ -82,15 +96,17 @@ def authenticate_user(login:LoginForm, session: SessionDep) -> TokenData:
         if not user:
             return None
         if verify_password(login.password, user.password_hash):
-            return TokenData(full_name=user.full_name, uuid=user.user_id, email=user.email,role=user.user_role)
+            return TokenData(full_name=user.full_name, uuid=user.id, email=user.email,role=user.user_role)
+        print("wrong password")
         return None
-    except Exception:
+    except Exception as e:
+        print(e)
         return None
     
 def get_hashed_password(password:str):
     return password_hash.hash(password)
 
-async def get_uuid(support_session: str = Cookie(None)):
+async def get_uuid(support_session: str = Cookie(None)) -> str:
     if support_session is None:
         print("Cookie not found")
         raise HTTPException(
@@ -139,7 +155,7 @@ def get_current_user(support_session: str = Cookie(None)):
                 detail="Token expired. Please log in."
             )
 
-        user = UserData(fullName=user_data.get("full_name"),email=user_data.get("email"))
+        user = UserData(fullName=user_data.get("full_name"),email=user_data.get("email"),role=user_data.get("role"))
         return {"user": user}
 
         
@@ -167,12 +183,15 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
         
         hashed_password = get_hashed_password(user.password)
 
-        user1 = Users(full_name=user.full_name,email=user.email,password_hash=hashed_password)
+
+        user1 = Users(full_name=user.full_name,email=user.email,password_hash=hashed_password,user_role=UserRole.CUSTOMER)
         print(user1)
         #Inserting user into the users table
         session.add(user1)
+        session.commit()
+        session.refresh(user1)
 
-        token_data = TokenData(full_name=user1.full_name, uuid=user1.user_id, email=user1.email, role=user1.user_role)
+        token_data = TokenData(full_name=user1.full_name, uuid=user1.id, email=user1.email, role=user1.user_role)
 
         access_token = create_access_token(token_data)
         age = 3600
@@ -191,9 +210,7 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
             path="/"
         )
 
-        user = UserData(fullName=user1.full_name, email=user1.email)
-
-        session.commit()
+        user = UserData(fullName=user1.full_name, email=user1.email, role=user1.user_role)
 
         return {"message": "Successful", "user": user}
     
@@ -209,6 +226,7 @@ async def login(loginForm: LoginForm, response: Response, session:SessionDep):
     token_data = authenticate_user(loginForm, session)
 
     if not token_data:
+        print("authenticate failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -232,7 +250,7 @@ async def login(loginForm: LoginForm, response: Response, session:SessionDep):
             path="/"
         )
 
-        user = UserData(fullName= token_data.full_name, email= token_data.email)
+        user = UserData(fullName= token_data.full_name, email= token_data.email, role = token_data.role)
 
         return {"message": "Successful", "user": user}
 
@@ -251,7 +269,7 @@ async def del_account(session:SessionDep, response:Response, support_session:str
     user_uuid = await get_uuid(support_session=support_session)
     anonymized_acc_name = "deleted_"+ str(random.randrange(1,10000000))
     anonymized_email = anonymized_acc_name + "@gmail.com"
-    user1 = session.exec(select(Users).where(Users.user_id == user_uuid)).one() #.values(full_name=anonymized_acc_name, email=anonymized_email), is_deleted=True)
+    user1 = session.exec(select(Users).where(Users.id == user_uuid)).one() #.values(full_name=anonymized_acc_name, email=anonymized_email), is_deleted=True)
     user1.full_name = anonymized_acc_name
     user1.email = anonymized_email
     user1.is_deleted = True
@@ -261,3 +279,75 @@ async def del_account(session:SessionDep, response:Response, support_session:str
     print(user1)
     response.delete_cookie(key=cookie_name, path="/")
     return {"message": "Account deleted successfully."}
+
+
+@router.post("/support/signup")
+async def support_signup(user:SupportSignup, response:Response, session:SessionDep):
+    if user.support_secret != SUPPORT_SECRET:
+        print("authenticate failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.agree_to_terms:
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return {"message": "Not agreed to terms"}
+    
+    try:
+        count = session.exec(select(func.count()).select_from(Users).where(Users.email == user.email)).one()
+        #if email already exists
+        if(count > 0):
+            response.status_code = status.HTTP_409_CONFLICT
+            return {"message": "Account with email already exists"}
+        
+        hashed_password = get_hashed_password(user.password)
+
+
+        user1 = Users(full_name=user.full_name,email=user.email,password_hash=hashed_password,user_role=UserRole.SUPPORT_AGENT)
+        print(user1)
+        #Inserting user into the users table
+        session.add(user1)
+        session.commit()
+        session.refresh(user1)
+
+        token_data = TokenData(full_name=user1.full_name, uuid=user1.id, email=user1.email, role=user1.user_role)
+
+        access_token = create_access_token(token_data)
+        age = 3600
+        if user.remember_me:
+            print("Remeber for 30 days")
+            age *= 24*30
+
+
+        response.set_cookie(
+            key=cookie_name,
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=3600,
+            path="/"
+        )
+
+        user = UserData(fullName=user1.full_name, email=user1.email, role=user1.user_role)
+
+        return {"message": "Successful", "user": user}
+    
+    except Exception as e:
+        print(e)
+        response.status_code = 500
+        return {"message": "Server Error"}
+
+@router.post("/support/login")
+async def support_login(form:SupportLogin, response:Response, session:SessionDep):
+    if form.support_secret != SUPPORT_SECRET:
+        print("authenticate failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    loginForm = LoginForm(email=form.email, password=form.password, remember_me=form.remember_me)
+    data = await login(user=loginForm, response=response, session=session)
+    return data

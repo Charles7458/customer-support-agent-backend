@@ -4,13 +4,11 @@ from ..services.orchestrate import generate_response
 from ..database import SessionDep
 from ..models import Messages, Conversations
 from ..routes.auth import get_uuid
-from datetime import datetime
-from pydantic import BaseModel, TypeAdapter
-from enum import Enum
+from pydantic import TypeAdapter
 from sqlmodel import select
 from sqlalchemy.exc import NoResultFound
 from ..services.conversations import create_conversation
-from ..models import Tracking, OrderCard, Content, ChatMessages, ChatHistoryResponse, UserRole
+from ..models import Content, ChatMessages, ChatHistoryResponse, UserRole
 
 router = APIRouter(prefix="/chat")
 
@@ -54,7 +52,7 @@ async def get_ai_chat(session:SessionDep,support_session:str = Cookie(None)):
     conversation_id = 'conv-'+user_id
     try:
         convo = session.exec(select(Conversations).where(Conversations.id==conversation_id)).one()
-        chats = session.exec(select(Messages.id, Messages.role, Messages.content, Messages.sent_at).select_from(Messages).where(Messages.conversation_id == conversation_id)).all()
+        chats = session.exec(select(Messages.id, Messages.role, Messages.content, Messages.sent_at).select_from(Messages).where(Messages.conversation_id == conversation_id).order_by(Messages.id)).all()
         adapter = TypeAdapter(list[ChatMessages])
         validated_chats = adapter.validate_python(chats, from_attributes=True, by_name=True)
         return {
@@ -102,11 +100,17 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
             user_message = ChatMessages(id=user_message.id,role=user_message.role,content=user_message.content,sent_at=user_message.sent_at)
             
             #Send user's message back to frontend
-            await websocket.send_json(
-                user_message.model_dump(mode="json")
-            )
+            await websocket.send_json({
+                "type": "message",
+                "value": user_message.model_dump(mode="json")
+            })
 
-            output = await generate_response(text=user_message.content.text, session=session, support_session=support_session)
+            await websocket.send_json({
+                "type": "status",
+                "value": "typing"
+            })
+
+            output = await generate_response(text=user_message.content.text, user_message_id=user_message.id, session=session, support_session=support_session)
 
             if output is not None:
                 print(output)
@@ -117,10 +121,15 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
             ai_message = store_chat(session=session,message=ai_msg,conversation_id=conversation_id)
             chat = ChatMessages(id=ai_message.id,role=ai_message.role,content=ai_message.content,sent_at=ai_message.sent_at)
             print(chat)
+            await websocket.send_json({
+                "type": "status",
+                "value": "stopped"
+            })
             #Send AI output
-            await websocket.send_json(
-                chat.model_dump(mode="json")
-            )
+            await websocket.send_json({
+                "type": "message",
+                "value":chat.model_dump(mode="json")
+            })
 
 
     

@@ -349,5 +349,5 @@ async def support_login(form:SupportLogin, response:Response, session:SessionDep
             headers={"WWW-Authenticate": "Bearer"},
         )
     loginForm = LoginForm(email=form.email, password=form.password, remember_me=form.remember_me)
-    data = await login(user=loginForm, response=response, session=session)
+    data = await login(loginForm=loginForm, response=response, session=session)
     return data

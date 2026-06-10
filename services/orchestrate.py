@@ -10,7 +10,7 @@ from ..models import Tracking, OrderCard, Content, ChatMessages, ChatHistoryResp
 from fastapi import Cookie
 
 
-async def generate_response(text:str, session:SessionDep, support_session:str = Cookie(None)) -> Content:
+async def generate_response(text:str, user_message_id:int, session:SessionDep, support_session:str = Cookie(None)) -> Content:
 
     user_id =  await get_uuid(support_session)
     print("uuid from orchestrate"+user_id)
@@ -38,7 +38,7 @@ async def generate_response(text:str, session:SessionDep, support_session:str = 
         elif function_call.name == "get_orders":
             result = get_orders(user_id=user_id)
         elif function_call.name == "create_a_ticket":
-            result = await create_a_ticket(issue=function_call.args["issue"],priority=function_call.args["priority"], session=session, support_session=support_session)
+            result = await create_a_ticket(issue=function_call.args["issue"],last_message_id=user_message_id, priority=function_call.args["priority"], session=session, support_session=support_session)
         
         # Create a function response part
         tool_call = {

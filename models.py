@@ -49,16 +49,17 @@ class Tickets(SQLModel, table=True):
     ticket_ref:str | None = Field(default=None)
     conversation_id: str | None = Field(default=None,foreign_key="conversations.id")
     customer_id: uuid.UUID | None = Field(foreign_key="users.id")
+    agent_id: uuid.UUID | None = Field(default=None)
     issue: str
     priority: str | None = Field(default="low")
     status: str | None = Field(default="open")
-    agent_id: uuid.UUID | None = Field(default=None)
     created_at: datetime = Field(
         default_factory=datetime.now
     )
     updated_at: datetime = Field(
         default_factory=datetime.now
     )
+
 
 class Conversations(SQLModel, table=True):
     id: str | None = Field(default=None,primary_key=True)
@@ -68,6 +69,7 @@ class Conversations(SQLModel, table=True):
     customer_name: str
     agent_id: uuid.UUID | None = Field(default=None)
     agent_name: str | None = Field(default=None)
+    last_message_id: int | None = Field(default=None, foreign_key="messages.id")
     created_at: datetime = Field(
         default_factory=datetime.now
     )
@@ -117,3 +119,4 @@ class ChatHistoryResponse(BaseModel):
 class TicketCreateRequest(BaseModel):
     issue:str
     priority: Priority
+    last_message_id: int

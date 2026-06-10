@@ -75,10 +75,10 @@ def get_faqs(keywords:list[str], session:SessionDep) -> list[Faqs]:
 def get_orders(user_id:str):
     pass
 
-async def create_a_ticket(issue:str,priority:Priority, session:SessionDep, support_session:str = Cookie(None)):
-    ticket = TicketCreateRequest(issue=issue,priority= priority)
+async def create_a_ticket(issue:str,priority:Priority, last_message_id:int, session:SessionDep, support_session:str = Cookie(None)):
+    ticket = TicketCreateRequest(issue=issue,priority= priority, last_message_id=last_message_id)
     try:
-        ticket = await create_ticket(ticket, session, support_session)
+        ticket = await create_ticket(ticketRequest=ticket, last_message_id=last_message_id, session=session, support_session=support_session)
         return ticket.model_dump(mode='json')
     except Exception as e:
         print("Gemini agent couldn't create ticket!!!")

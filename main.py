@@ -1,16 +1,15 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, select
 import os
-import nanoid
 from dotenv import load_dotenv
-import datetime
-from .models import Faqs, Tickets
+from .models import Faqs
 from .routes.auth import router as auth_router
 from .routes.users import router as user_router
 from .routes.chat import router as chat_router
 from .routes.tickets import router as ticket_router
+from .routes.support_chat import router as support_chat_router
 
 load_dotenv()
 
@@ -20,6 +19,7 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(chat_router)
 app.include_router(ticket_router)
+app.include_router(support_chat_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,18 +51,4 @@ SessionDep = Annotated[Session, Depends(get_session)]
 # Awaiting (Awaiting response from user), 
 # Solved (ticket issue resolved)
 
-@app.get("/")
-async def greet():
-    return "Hello World"
 
-@app.get("/faq")
-async def fetch_faq_with_keyword(keyword, session: SessionDep) -> list[Faqs]:
-    searchStr = '%'+keyword+'%'
-    results = session.exec(select(Faqs).where(Faqs.keywords.like(searchStr)))
-    faqs = results.all()
-    return faqs
-
-
-
-
-    

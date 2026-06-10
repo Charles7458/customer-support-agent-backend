@@ -40,7 +40,8 @@ def generate_prompt(prompt:str) -> str:
     3. If the issue cannot be resolved, escalate tickets using create_a_ticket function.
     4. Don't generate images or videos if asked by the user input. Respond with "I cannot process such requests".
     5. Elegantly display multiple answers as bullet lists using the provided response schema. Don't repeat text in text message and bullet list.
-
+    6. Answer questions with only the resources and data you have, do not make up answers.
+    
     USER_INPUT_TO_PROCESS:
     {prompt}
 

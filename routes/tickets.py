@@ -158,7 +158,7 @@ async def get_agent_tickets(session:SessionDep, page:int = 1, support_session:st
 
 
 @router.post("/create-ticket")
-async def create_ticket(ticketRequest:TicketCreateRequest, last_message_id:int, session:SessionDep, support_session:str = Cookie(None)):
+async def create_ticket(ticketRequest:TicketCreateRequest, session:SessionDep,last_message_id:int|None=None, support_session:str = Cookie(None)):
 
     customer_id = await get_uuid(support_session)
 

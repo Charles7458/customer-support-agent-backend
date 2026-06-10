@@ -119,4 +119,4 @@ class ChatHistoryResponse(BaseModel):
 class TicketCreateRequest(BaseModel):
     issue:str
     priority: Priority
-    last_message_id: int
+    last_message_id: int | None = None

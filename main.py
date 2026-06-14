@@ -23,13 +23,13 @@ app.include_router(support_chat_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # your frontend
+    allow_origins=[os.getenv("FRONTEND_URL")],  # your frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-db_url = os.getenv("database_url")
+db_url = os.getenv("DATABASE_URL")
 
 engine = create_engine(db_url, echo=True)
 

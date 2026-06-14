@@ -234,6 +234,8 @@ async def login(loginForm: LoginForm, response: Response, session:SessionDep):
         )
     
     else:
+        #anyone who logs in the normal login is a customer
+        token_data.role = 'CUSTOMER'
         access_token = create_access_token(token_data)
         age = 3600
         if loginForm.remember_me:
@@ -349,5 +351,33 @@ async def support_login(form:SupportLogin, response:Response, session:SessionDep
             headers={"WWW-Authenticate": "Bearer"},
         )
     loginForm = LoginForm(email=form.email, password=form.password, remember_me=form.remember_me)
-    data = await login(loginForm=loginForm, response=response, session=session)
-    return data
+    token_data = authenticate_user(loginForm, session)
+
+    if not token_data:
+        print("authenticate failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    else:
+        access_token = create_access_token(token_data)
+        age = 3600
+        if loginForm.remember_me:
+            print("Remeber for 30 days")
+            age *= 24*30
+
+        response.set_cookie(
+            key=cookie_name,
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=age,
+            path="/"
+        )
+
+        user = UserData(fullName= token_data.full_name, email= token_data.email, role = token_data.role)
+
+        return {"message": "Successful", "user": user}

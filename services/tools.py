@@ -1,9 +1,13 @@
 from typing import Literal
 from ..database import SessionDep
 from sqlmodel import select
-from ..models import TicketCreateRequest, Faqs
+from ..models import TicketCreateRequest, Tickets, Faqs
 from ..routes.tickets import create_ticket
 from fastapi import Cookie
+from ..routes.auth import get_uuid
+from ..services.conversations import create_ticket_conversation
+from ..routes.tickets import find_support_agent
+import nanoid
 
 Priority = Literal['low' ,'medium' , 'high']
 
@@ -76,9 +80,30 @@ def get_orders(user_id:str):
     pass
 
 async def create_a_ticket(issue:str,priority:Priority, last_message_id:int, session:SessionDep, support_session:str = Cookie(None)):
-    ticket = TicketCreateRequest(issue=issue,priority= priority, last_message_id=last_message_id)
     try:
-        ticket = await create_ticket(ticketRequest=ticket, last_message_id=last_message_id, session=session, support_session=support_session)
+        customer_id = await get_uuid(support_session)
+
+        print("uuid from create-ticket"+customer_id)
+
+        tkt_ref = f"TKT-{nanoid.generate(size=10)}"
+
+        agent_id = await find_support_agent(session=session)
+        
+        ticket = Tickets(
+            ticket_ref=tkt_ref, 
+            status='open', 
+            customer_id=customer_id, 
+            agent_id=agent_id, 
+            issue = issue, 
+            priority =priority,
+            creator_type="Nexus AI"
+        )
+
+        convo = create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
+        ticket.conversation_id = convo.id
+        session.add(ticket)
+        session.commit()
+        session.refresh(ticket)
         return ticket.model_dump(mode='json')
     except Exception as e:
         print("Gemini agent couldn't create ticket!!!")

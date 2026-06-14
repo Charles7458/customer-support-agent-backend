@@ -87,12 +87,18 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
         if(support_session is None):
             print("Cookie not found")
         while True:
+
+            await websocket.send_json({
+                "type": "status",
+                "value": "online"
+            })
+
             user_id = await get_uuid(support_session=support_session)
             conversation_id = 'conv-'+user_id
 
-            user_message: dict[str,str] = await websocket.receive_json()
-            
-
+            data: dict[str,str] = await websocket.receive_json()
+            # data => {"type": "message", "value": message}
+            user_message = data["value"]
             print("user message: ", user_message)
 
             user_msg = ChatMessages(role=UserRole.CUSTOMER, content=user_message["content"], sent_at=user_message["sent_at"])

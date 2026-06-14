@@ -19,9 +19,11 @@ class Priority(str, Enum):
     high = 'high'
 
 class ChatStatus(str, Enum):
-    RESOLVED = "RESOLVED"
-    PENDING = "PENDING"
+    CLOSED = "CLOSED",
+    RESOLVED = "RESOLVED",
+    PENDING = "PENDING",
     ACTIVE = "ACTIVE"
+
 
 class Faqs(SQLModel, table=True):
     id: int | None = Field(default=None,primary_key=True)
@@ -48,11 +50,13 @@ class Tickets(SQLModel, table=True):
     id: int | None = Field(default=None,primary_key=True)
     ticket_ref:str | None = Field(default=None)
     conversation_id: str | None = Field(default=None,foreign_key="conversations.id")
-    customer_id: uuid.UUID | None = Field(foreign_key="users.id")
-    agent_id: uuid.UUID | None = Field(default=None)
+    customer_id: uuid.UUID | None = Field(default=None, foreign_key="users.id")
+    agent_id: uuid.UUID | None = Field(default=None, foreign_key="users.id")
     issue: str
     priority: str | None = Field(default="low")
     status: str | None = Field(default="open")
+    created_by: uuid.UUID | None = Field(default=None, foreign_key="users.id")
+    creator_type: str
     created_at: datetime = Field(
         default_factory=datetime.now
     )
@@ -119,4 +123,7 @@ class ChatHistoryResponse(BaseModel):
 class TicketCreateRequest(BaseModel):
     issue:str
     priority: Priority
-    last_message_id: int | None = None
+
+class SupportTicketCreateRequest(TicketCreateRequest):
+    customer_email: str
+    set_me_as_agent:bool

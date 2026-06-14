@@ -65,9 +65,13 @@ async def support_chat(conversation_id:str, websocket:WebSocket, session:Session
             if(role=="CUSTOMER"):
                 print("customer is online")
                 other_id = session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id)).one()
-            else:
+            elif(role=="SUPPORT_AGENT"):
                 print("agent is online")
                 other_id = session.exec(select(Conversations.customer_id).where(Conversations.id == conversation_id)).one()
+            else:
+                print("unknown is online")
+                other_id = session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id)).one()
+                
             print("other id:",other_id)
             # sending the other person's online status
             online_status = "online" if(manager.isOnline(other_id)) else "offline"

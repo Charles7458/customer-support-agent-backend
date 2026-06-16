@@ -2,9 +2,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Cookie, HTTPExcep
 from ..database import SessionDep
 from .auth import get_uuid, get_current_user
 import uuid
-from ..models import Conversations, Messages, Content, ChatMessages, UserRole
+from ..models import Conversations, Messages, ChatMessages
 from sqlmodel import select
 from pydantic import BaseModel, TypeAdapter
+from datetime import datetime
 
 router = APIRouter(prefix="/support-chat")
 
@@ -52,6 +53,17 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+async def store_chat(conversation_id:str,message:Messages, session:SessionDep):
+    if isinstance(message.sent_at, str):
+                    # fromisoformat handles the "2026-04-12T16:40:00Z" format perfectly
+            message.sent_at = datetime.fromisoformat(message.sent_at.replace("Z", "+00:00"))
+    session.add(message)
+    await session.commit()
+    await session.refresh(message)
+    return message
+
+
 @router.websocket("/ws/{conversation_id}")
 async def support_chat(conversation_id:str, websocket:WebSocket, session:SessionDep, support_session:str = Cookie(None)):
     id = await get_uuid(support_session)
@@ -64,13 +76,16 @@ async def support_chat(conversation_id:str, websocket:WebSocket, session:Session
                 
             if(role=="CUSTOMER"):
                 print("customer is online")
-                other_id = session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id)).one()
+                other_id_res = await session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id))
+                other_id = other_id_res.one()
             elif(role=="SUPPORT_AGENT"):
                 print("agent is online")
-                other_id = session.exec(select(Conversations.customer_id).where(Conversations.id == conversation_id)).one()
+                other_id_res = await session.exec(select(Conversations.customer_id).where(Conversations.id == conversation_id))
+                other_id = other_id_res.one()
             else:
                 print("unknown is online")
-                other_id = session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id)).one()
+                other_id_res = await session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id))
+                other_id = other_id_res.one()
                 
             print("other id:",other_id)
             # sending the other person's online status
@@ -93,9 +108,7 @@ async def support_chat(conversation_id:str, websocket:WebSocket, session:Session
             elif data["type"] == "message":
                 user_message = data["value"]
                 message = Messages(conversation_id=conversation_id,role=user_message["role"], content=user_message["content"], sent_at=user_message["sent_at"])
-                session.add(message)
-                session.commit()
-                session.refresh(message)
+                message = await store_chat(conversation_id=conversation_id, message=message,session=session)
                 chat = ChatMessages(id=message.id,role=message.role,content=message.content,sent_at=message.sent_at)
                 print(chat)
                 #Send message back to the sender
@@ -110,19 +123,24 @@ async def support_chat(conversation_id:str, websocket:WebSocket, session:Session
 
     except WebSocketDisconnect:
         manager.disconnect(id)
-        manager.send_status(other_id, "offline")
+        if(other_id and manager.isOnline(other_id)):
+            await manager.send_status(other_id, "offline")
 
 
 @router.post("/")
-async def fetch_support_chat(convID:ConvID,session:SessionDep, support_session:str = Cookie(None)):
+async def fetch_support_chat(convID:ConvID, session:SessionDep, support_session:str = Cookie(None)):
+    if not support_session:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credentials needed")
     if not convID.conversation_id:
         print("support chat needs conv id")
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Conversation ID needed")
 
     try:
 
-        convo = session.exec(select(Conversations).where(Conversations.id==convID.conversation_id)).one()
-        chats = session.exec(select(Messages.id, Messages.role, Messages.content, Messages.sent_at).select_from(Messages).where(Messages.conversation_id == convID.conversation_id).order_by(Messages.id)).all()
+        convo_res = await session.exec(select(Conversations).where(Conversations.id==convID.conversation_id))
+        convo = convo_res.one()
+        chats_res = await session.exec(select(Messages.id, Messages.role, Messages.content, Messages.sent_at).select_from(Messages).where(Messages.conversation_id == convID.conversation_id).order_by(Messages.id))
+        chats = chats_res.all()
         adapter = TypeAdapter(list[ChatMessages])
         validated_chats = adapter.validate_python(chats, from_attributes=True, by_name=True)
         return {

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Cookie, status, HTTPException, Response
 from ..models import Users
 from sqlmodel import select, func
 from .auth import authenticate_user, LoginForm, get_current_user, get_uuid, get_hashed_password, create_access_token, cookie_name, TokenData, UserData
-
+from datetime import datetime, timezone
 
 class PswdUpdateForm(BaseModel):
     currentPassword:str
@@ -24,11 +24,12 @@ async def update_details(updateForm:NameUpdateForm, session:SessionDep,response:
 
     user_uuid = await get_uuid(support_session=support_session)
 
-    user1 = session.exec(select(Users).where(Users.user_id==user_uuid)).one()
+    user1 = await session.exec(select(Users).where(Users.user_id==user_uuid)).one()
     user1.full_name = updateForm.newName
+    user1.updated_at = datetime.now(timezone.utc)
     session.add(user1)
-    session.commit()
-    session.refresh(user1)
+    await session.commit()
+    await session.refresh(user1)
 
     access_token = create_access_token(token_data=TokenData(full_name=user1.full_name,uuid=user1.user_id,email=user1.email,role=user1.email))
     age = 3600
@@ -58,18 +59,19 @@ async def update_email(updateForm:EmailUpdateForm, session:SessionDep, response:
         )
     else:
         # check if email associated with another account
-        count = session.exec(select(func.count()).select_from(Users).where(Users.email == updateForm.newEmail)).one()
+        count = await session.exec(select(func.count()).select_from(Users).where(Users.email == updateForm.newEmail)).one()
         if(count > 0):
             raise HTTPException(
                 status_code = status.HTTP_409_CONFLICT,
                 detail="Email already associated with another account"
             )
-        user1 = session.exec(select(Users).where(Users.user_id == user.uuid)).one()
+        user1 = await session.exec(select(Users).where(Users.user_id == user.uuid)).one()
         user1.email = updateForm.newEmail
+        user1.updated_at = datetime.now(timezone.utc)
         session.add(user1)
-        session.commit()
+        await session.commit()
 
-        session.refresh(user1)
+        await session.refresh(user1)
 
         access_token = create_access_token(token_data=TokenData(full_name=user1.full_name,uuid=user1.user_id,email=user1.email,role=user1.email))
         age = 3600
@@ -99,8 +101,9 @@ async def update_password(updateForm:PswdUpdateForm, session:SessionDep, support
         )
     else:
         hashed_password = get_hashed_password(updateForm.newPassword)
-        user1 = session.exec(select(Users).where(Users.user_id == user.uuid)).one()
+        user1 = await session.exec(select(Users).where(Users.user_id == user.uuid)).one()
         user1.password_hash = hashed_password
+        user1.updated_at = datetime.now(timezone.utc)
         session.add(user1)
-        session.commit()
+        await session.commit()
 

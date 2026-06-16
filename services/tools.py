@@ -1,12 +1,12 @@
 from typing import Literal
 from ..database import SessionDep
-from sqlmodel import select
-from ..models import TicketCreateRequest, Tickets, Faqs
-from ..routes.tickets import create_ticket
+from sqlmodel import select, and_
+from ..models import Tickets, Faqs, Orders, Tracking, AgentOrderResponse
 from fastapi import Cookie
 from ..routes.auth import get_uuid
 from ..services.conversations import create_ticket_conversation
 from ..routes.tickets import find_support_agent
+import datetime
 import nanoid
 
 Priority = Literal['low' ,'medium' , 'high']
@@ -21,15 +21,67 @@ Tools:
 
 #Declarations
 
-get_order_declaration = {
-    "name": "get_orders",
-    "description": "Get recent orders of the corresponding user",
+get_recent_order_declaration = {
+    "name": "get_recent_orders",
+    "description": "Gets the order id, product name and status of last 5 orders of the user. Use it if user wants order information but doesn't specify.",
+}
+
+get_order_by_month_declaration = {
+    "name": "get_order_by_month",
+    "description": "Get order id, product name and status of orders placed in a specific month and year which were placed by the corresponding user",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "month": {
+                "type": "number",
+                "description": "Number corresponding to the month of the order date from 1 to 12. January = 1,..., December = 12"
+            },
+            "year": {
+                "type": "number",
+                "description": "Year of the order date. eg. 2004"
+            }
+        },
+
+        "required": ["month","year"]
+    },
+}
+
+get_order_by_id_declaration = {
+    "name": "get_order_by_id",
+    "description": "Get order by a specific order id. Use it if order id of the desired order information is known.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "order_id": {
+                "type": "string",
+                "description": "Order ID of the specific order"
+            }
+        },
+        
+        "required": ["order_id"]
+    },
+}
+
+get_tracking_updates_declaration = {
+    "name": "get_tracking_updates",
+    "description": "This function gets tracking updates of a specific order including tracking_id and carrier name. Use this only if the user wants to know the updates of an order delivery",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "order_id" : {
+                "type": "string",
+                "description": "Order ID of the order"
+            }
+        },
+        
+        "required": ["order_id"]
+    },
 }
 
 
 create_ticket_declaration = {
     "name": "create_a_ticket",
-    "description": "Create a ticket if user's query is only solvable by support team staff",
+    "description": "This function is for creating a ticket. Use this function if the user wants to escalate the issue, create a ticket or wants a refund/replacement or an issue not solvable by chat.",
     "parameters": {
          "type" : "object",
          "properties": {
@@ -48,7 +100,7 @@ create_ticket_declaration = {
 
 get_faq_declaration = {
     "name": "get_faqs",
-    "description": "Get relevant FAQs from database using keywords from the users's query",
+    "description": "Use this function when user asks a FAQ. FAQs such as 'what is the refund policy?'",
     "parameters": {
          "type": "object",
          "properties" : {
@@ -64,10 +116,10 @@ get_faq_declaration = {
 
 # Functions
 
-def get_faqs(keywords:list[str], session:SessionDep) -> list[Faqs]:
-    faqs = session.exec(select(Faqs)).all()
+async def get_faqs(keywords:list[str], session:SessionDep, support_session:str = Cookie(None)) -> list[Faqs]:
+    results = await session.exec(select(Faqs))
     res = []
-    for faq in faqs:
+    for faq in results.all():
             for keyword in keywords:
                 if(faq.keywords.find(keyword) != -1):
                     res.append(faq)
@@ -76,14 +128,88 @@ def get_faqs(keywords:list[str], session:SessionDep) -> list[Faqs]:
     return res
 
 
-def get_orders(user_id:str):
-    pass
+async def get_recent_orders(session:SessionDep, support_session:str = Cookie(None)):
+    try:
+        customer_id = await get_uuid(support_session)
+        results = await session.exec(select(Orders.id,Orders.product_name, Orders.status).select_from(Orders).where(Orders.customer_id==customer_id).order_by(Orders.last_update.desc()).limit(5))
+        orders = []
+        for row in results.all():
+            order = AgentOrderResponse(order_id=row.id, product_name = row.product_name, status= row.status)
+            orders.append(order)
+
+        return orders
+    
+    except Exception as e:
+        print("agent failed to get recent orders")
+        print(e)
+        return "tool call failed"
+
+async def get_orders_by_month(month:int, year:int, session:SessionDep, support_session:str = Cookie(None)):
+    # 1. Define the start of the target month
+    start_date = datetime(year, month, 1)
+    
+    # 2. Calculate the start of the NEXT month
+    # This handles the year-rollover (e.g., if month is 12, next is Jan of year+1)
+    if month == 12:
+        next_month_start = datetime(year + 1, 1, 1)
+    else:
+        next_month_start = datetime(year, month + 1, 1)
+    try:
+        customer_id = await get_uuid(support_session)
+        results = await session.exec(
+            select(Orders.id, Orders.product_name, Orders.status)
+            .where(
+                and_(
+                    Orders.customer_id==customer_id,
+                    Orders.order_date >= start_date, 
+                    Orders.order_date < next_month_start
+                )
+            )
+            .order_by(Orders.last_update.desc())
+            )
+            
+        orders = []
+
+        for row in results.all():
+            order = AgentOrderResponse(order_id=row.id, product_name = row.product_name, status= row.status)
+            orders.append(order)
+        
+        return orders
+    except Exception as e:
+        print(e)
+        return "tool call failed"
+    
+async def get_order_by_id(order_id:str, session:SessionDep, support_session:str = Cookie(None)):
+    result = await session.exec(select(Orders.id, Orders.product_name, Orders.status).where(Orders.id==order_id))
+    order_result = result.one()
+    order = AgentOrderResponse(order_id=order_result.id, product_name=order_result.product_name, status = order_result.status)
+    return order
+    
+async def get_tracking_updates(order_id: str,session:SessionDep, support_session:str = Cookie(None)):
+    try:
+        order = await session.get(Orders, order_id)
+        if order is None:
+            return "Order does not exist"
+        tracking_id = order.tracking_id
+        results = await session.exec(select(Tracking.updates, Tracking.updated_at.label("timestamp")).select_from(Tracking).where(Tracking.order_id==order_id).order_by(Tracking.id))
+        updates = results.all()
+
+        return {
+            "tracking_id": tracking_id,
+            "carrier": updates[0].carrier,
+            "updates" : updates
+        }
+    except Exception as e:
+        print(e)
+        return "Couldn't fetch order updates"
+
+    
 
 async def create_a_ticket(issue:str,priority:Priority, last_message_id:int, session:SessionDep, support_session:str = Cookie(None)):
     try:
         customer_id = await get_uuid(support_session)
 
-        print("uuid from create-ticket"+customer_id)
+        print("uuid from create-ticket "+customer_id)
 
         tkt_ref = f"TKT-{nanoid.generate(size=10)}"
 
@@ -99,11 +225,11 @@ async def create_a_ticket(issue:str,priority:Priority, last_message_id:int, sess
             creator_type="Nexus AI"
         )
 
-        convo = create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
+        convo = await create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
         ticket.conversation_id = convo.id
         session.add(ticket)
-        session.commit()
-        session.refresh(ticket)
+        await session.commit()
+        await session.refresh(ticket)
         return ticket.model_dump(mode='json')
     except Exception as e:
         print("Gemini agent couldn't create ticket!!!")

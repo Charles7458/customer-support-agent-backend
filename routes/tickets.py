@@ -1,27 +1,23 @@
 from fastapi import APIRouter, Cookie, HTTPException, status
 from ..database import SessionDep
-from ..models import Tickets, TicketCreateRequest, SupportTicketCreateRequest, Priority
-from ..models import Users, Conversations, Messages, Content, UserRole
+from ..models import Tickets, TicketCreateRequest, SupportTicketCreateRequest, TicketPriority
+from ..models import Users, Conversations, Messages, Content, TicketStatus
 from sqlmodel import select, func, and_, col
 import nanoid
 from ..services.conversations import create_ticket_conversation
 from .auth import get_uuid,get_current_user
-from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/tickets")
 
 #Ticket statuses:
-# Open (in progress by support team), 
-# Awaiting (Awaiting response from user), 
-# Solved (ticket issue resolved)
+# open (in progress by support team), 
+# pending,
+# closed,
+# resolved (ticket issue resolved)
 
-class TicketStatus(str, Enum):
-    open = "open",
-    pending = "pending",
-    closed = "closed",
-    resolved = "resolved"
+
 
 class TicketMessage(BaseModel):
     content: Content | None = None
@@ -46,10 +42,10 @@ class TicketUpdateRequest(BaseModel):
     ticket_id: int
     issue: str
     status: TicketStatus
-    priority: Priority
+    priority: TicketPriority
 
 @router.get("/")
-async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:TicketStatus | None = None, priority: Priority | None = None, page:int = 1, per_page:int = 10, support_session:str = Cookie(None)):
+async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:TicketStatus | None = None, priority: TicketPriority | None = None, page:int = 1, per_page:int = 10, support_session:str = Cookie(None)):
     customer_id = await get_uuid(support_session)
     
     try:
@@ -62,10 +58,11 @@ async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:T
             .where(Tickets.customer_id == customer_id)
         )
 
-        counts_result = session.exec(count_query).one()
+        counts_result = await session.exec(count_query)
+        counts = counts_result.one()
 
-        total_count = counts_result.total
-        pending_count = counts_result.pending
+        total_count = counts.total
+        pending_count = counts.pending
 
         print("total:",total_count," pending:",pending_count)
 
@@ -110,12 +107,14 @@ async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:T
 
 
         # 3. Execute the asynchronous database query
-        result = session.exec(query)
+        result = await session.exec(query)
         
         # 4. current count
         current_count_query = select(func.count(Tickets.id)).where(and_(Tickets.customer_id == customer_id, *conditions))
 
-        current_count = session.exec(current_count_query).one()
+        current_count_res = await session.exec(current_count_query)
+        current_count = current_count_res.one()
+
 
         # 5. Parse rows into structured objects
         ticket_list = []
@@ -154,7 +153,7 @@ async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:T
         raise HTTPException(status_code=500, detail="Internal server transaction error")
  
 @router.get("/support/")
-async def get_agent_tickets(session:SessionDep, search:str | None = None, tkt_status:TicketStatus | None = None, priority:Priority | None = None, page:int = 1, per_page:int=10,support_session:str = Cookie(None)):
+async def get_agent_tickets(session:SessionDep, search:str | None = None, tkt_status:TicketStatus | None = None, priority:TicketPriority | None = None, page:int = 1, per_page:int=10,support_session:str = Cookie(None)):
         user = get_current_user(support_session)["user"]
         if(user.role not in ['SUPPORT_AGENT', 'ADMIN']):
             raise HTTPException(
@@ -172,10 +171,11 @@ async def get_agent_tickets(session:SessionDep, search:str | None = None, tkt_st
                 .where(Tickets.agent_id == agent_id)
             )
 
-            counts_result = session.exec(count_query).one()
+            counts_result = await session.exec(count_query)
+            counts = counts_result.one()
 
-            total_count = counts_result.total
-            pending_count = counts_result.pending
+            total_count = counts.total
+            pending_count = counts.pending
 
             # 2. Construct the high-performance SQLModel query layout
             
@@ -223,14 +223,15 @@ async def get_agent_tickets(session:SessionDep, search:str | None = None, tkt_st
 
 
             # 3. Execute the asynchronous database query
-            result = session.exec(query)
+            result = await session.exec(query)
 
             # 4. current count
             current_count_query = select(func.count(Tickets.id))
     
             current_count_query.where(and_(Tickets.agent_id == agent_id, *conditions))
     
-            current_count = session.exec(current_count_query).one()
+            current_count_res = await session.exec(current_count_query)
+            current_count = current_count_res.one()
             
             # 4. Parse rows into structured objects
             ticket_list = []
@@ -293,11 +294,11 @@ async def create_ticket(ticketRequest:TicketCreateRequest, session:SessionDep, l
         creator_type="Human"
     )
 
-    convo = create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
+    convo = await create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
     ticket.conversation_id = convo.id
     session.add(ticket)
-    session.commit()
-    session.refresh(ticket)
+    await session.commit()
+    await session.refresh(ticket)
     return ticket
 
 # Ticket Creation for Support agents and admin
@@ -313,7 +314,7 @@ async def create_ticket_support(ticketRequest:SupportTicketCreateRequest, sessio
             detail="Unauthorized request."
         )
     
-    customer_id = session.exec(select(Users.id).select_from(Users).where(Users.email==ticketRequest.customer_email)).one()
+    customer_id = await session.exec(select(Users.id).select_from(Users).where(Users.email==ticketRequest.customer_email)).one()
     
 
     print("uuid from create-ticket"+id)
@@ -338,11 +339,11 @@ async def create_ticket_support(ticketRequest:SupportTicketCreateRequest, sessio
         creator_type="Human"
     )
 
-    convo = create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
+    convo = await create_ticket_conversation(session=session, last_message_id=last_message_id,ticket=ticket)
     ticket.conversation_id = convo.id
     session.add(ticket)
-    session.commit()
-    session.refresh(ticket)
+    await session.commit()
+    await session.refresh(ticket)
     return ticket
 
 
@@ -354,13 +355,13 @@ async def update_ticket(update: TicketUpdateRequest, session:SessionDep, support
     if not role or (role != 'SUPPORT_AGENT' and role != "ADMIN"):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
     
-    ticket = session.get(Tickets, update.ticket_id)
+    ticket = await session.get(Tickets, update.ticket_id)
     ticket.issue = update.issue
     ticket.priority = update.priority
     ticket.status = update.status
     session.add(ticket)
-    session.commit()
-    session.refresh(ticket)
+    await session.commit()
+    await session.refresh(ticket)
     return ticket
 
 
@@ -410,7 +411,7 @@ async def find_support_agent(session:SessionDep):
         )
 
         # Execute the asynchronous query pass
-        result = session.exec(query)
+        result = await session.exec(query)
         
         # Extract the first matching row tuple: (agent_id, tkt_count)
         first_row = result.first()

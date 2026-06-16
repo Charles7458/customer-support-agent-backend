@@ -90,9 +90,10 @@ def create_access_token(token_data: TokenData, expires_delta: timedelta | None =
 
 
 
-def authenticate_user(login:LoginForm, session: SessionDep) -> TokenData:
+async def authenticate_user(login:LoginForm, session: SessionDep) -> TokenData:
     try:
-        user = session.exec(select(Users).where(Users.email == login.email)).one()
+        result = await session.exec(select(Users).where(Users.email == login.email))
+        user = result.one()
         if not user:
             return None
         if verify_password(login.password, user.password_hash):
@@ -175,7 +176,8 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
         return {"message": "Not agreed to terms"}
     
     try:
-        count = session.exec(select(func.count()).select_from(Users).where(Users.email == user.email)).one()
+        res = await session.exec(select(func.count()).select_from(Users).where(Users.email == user.email))
+        count = res.one()
         #if email already exists
         if(count > 0):
             response.status_code = status.HTTP_409_CONFLICT
@@ -188,8 +190,8 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
         print(user1)
         #Inserting user into the users table
         session.add(user1)
-        session.commit()
-        session.refresh(user1)
+        await session.commit()
+        await session.refresh(user1)
 
         token_data = TokenData(full_name=user1.full_name, uuid=user1.id, email=user1.email, role=user1.user_role)
 
@@ -223,7 +225,7 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
 @router.post("/login", status_code=200)
 async def login(loginForm: LoginForm, response: Response, session:SessionDep):
     #user's name stored in result if user is authenticated
-    token_data = authenticate_user(loginForm, session)
+    token_data = await authenticate_user(loginForm, session)
 
     if not token_data:
         print("authenticate failed")
@@ -271,13 +273,15 @@ async def del_account(session:SessionDep, response:Response, support_session:str
     user_uuid = await get_uuid(support_session=support_session)
     anonymized_acc_name = "deleted_"+ str(random.randrange(1,10000000))
     anonymized_email = anonymized_acc_name + "@gmail.com"
-    user1 = session.exec(select(Users).where(Users.id == user_uuid)).one() #.values(full_name=anonymized_acc_name, email=anonymized_email), is_deleted=True)
+    result = await session.exec(select(Users).where(Users.id == user_uuid))
+    
+    user1 = result.one() #.values(full_name=anonymized_acc_name, email=anonymized_email), is_deleted=True)
     user1.full_name = anonymized_acc_name
     user1.email = anonymized_email
     user1.is_deleted = True
     session.add(user1)
-    session.commit()
-    session.refresh(user1)
+    await session.commit()
+    await session.refresh(user1)
     print(user1)
     response.delete_cookie(key=cookie_name, path="/")
     return {"message": "Account deleted successfully."}
@@ -297,7 +301,8 @@ async def support_signup(user:SupportSignup, response:Response, session:SessionD
         return {"message": "Not agreed to terms"}
     
     try:
-        count = session.exec(select(func.count()).select_from(Users).where(Users.email == user.email)).one()
+        res = await session.exec(select(func.count()).select_from(Users).where(Users.email == user.email))
+        count = res.one()
         #if email already exists
         if(count > 0):
             response.status_code = status.HTTP_409_CONFLICT
@@ -310,8 +315,8 @@ async def support_signup(user:SupportSignup, response:Response, session:SessionD
         print(user1)
         #Inserting user into the users table
         session.add(user1)
-        session.commit()
-        session.refresh(user1)
+        await session.commit()
+        await session.refresh(user1)
 
         token_data = TokenData(full_name=user1.full_name, uuid=user1.id, email=user1.email, role=user1.user_role)
 
@@ -351,7 +356,7 @@ async def support_login(form:SupportLogin, response:Response, session:SessionDep
             headers={"WWW-Authenticate": "Bearer"},
         )
     loginForm = LoginForm(email=form.email, password=form.password, remember_me=form.remember_me)
-    token_data = authenticate_user(loginForm, session)
+    token_data = await authenticate_user(loginForm, session)
 
     if not token_data:
         print("authenticate failed")

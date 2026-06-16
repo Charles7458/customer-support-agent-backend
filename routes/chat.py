@@ -38,12 +38,12 @@ def redact_chat(chat:dict[str,str]):
     redacted = redact_pii(chat["input"])
     return redacted
 
-def store_chat(session:SessionDep, message:ChatMessages, conversation_id: str) -> Messages:
+async def store_chat(session:SessionDep, message:ChatMessages, conversation_id: str) -> Messages:
     serializable_content = message.content.model_dump()
     msg1 = Messages(conversation_id=conversation_id,role=message.role,content=serializable_content,sent_at=message.sent_at)
     session.add(msg1)
-    session.commit()
-    session.refresh(msg1)
+    await session.commit()
+    await session.refresh(msg1)
     return msg1
 
 @router.get("/", response_model=ChatHistoryResponse)
@@ -51,8 +51,10 @@ async def get_ai_chat(session:SessionDep,support_session:str = Cookie(None)):
     user_id = await  get_uuid(support_session)
     conversation_id = 'conv-'+user_id
     try:
-        convo = session.exec(select(Conversations).where(Conversations.id==conversation_id)).one()
-        chats = session.exec(select(Messages.id, Messages.role, Messages.content, Messages.sent_at).select_from(Messages).where(Messages.conversation_id == conversation_id).order_by(Messages.id)).all()
+        convo_res = await session.exec(select(Conversations).where(Conversations.id==conversation_id))
+        convo = convo_res.one()
+        chats_res = await session.exec(select(Messages.id, Messages.role, Messages.content, Messages.sent_at).select_from(Messages).where(Messages.conversation_id == conversation_id).order_by(Messages.id))
+        chats = chats_res.all()
         adapter = TypeAdapter(list[ChatMessages])
         validated_chats = adapter.validate_python(chats, from_attributes=True, by_name=True)
         return {
@@ -61,11 +63,7 @@ async def get_ai_chat(session:SessionDep,support_session:str = Cookie(None)):
         }
 
     except NoResultFound:
-        conversation = create_conversation(session,conversation_id,user_id)
-        session.add(conversation)
-        session.commit()
-        session.refresh(conversation)
-        print("Conversation created"+user_id)
+        conversation = await create_conversation(session,conversation_id,user_id)
         return {
             "conversation": conversation,
             "messages" : []
@@ -102,7 +100,7 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
             print("user message: ", user_message)
 
             user_msg = ChatMessages(role=UserRole.CUSTOMER, content=user_message["content"], sent_at=user_message["sent_at"])
-            user_message = store_chat(session, user_msg, conversation_id)
+            user_message = await store_chat(session, user_msg, conversation_id)
             user_message = ChatMessages(id=user_message.id,role=user_message.role,content=user_message.content,sent_at=user_message.sent_at)
             
             #Send user's message back to frontend
@@ -116,7 +114,7 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
                 "value": "typing"
             })
 
-            output = await generate_response(text=user_message.content.text, user_message_id=user_message.id, session=session, support_session=support_session)
+            output = await generate_response(text=user_message.content.text, user_message_id=user_message.id, conversation_id=conversation_id, session=session, support_session=support_session)
 
             if output is not None:
                 print(output)
@@ -124,7 +122,7 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
             else:
                 ai_msg = ChatMessages(role=UserRole.AI, content = Content(text="Sorry, we ran into a problem while processing your query. Please try again."))
 
-            ai_message = store_chat(session=session,message=ai_msg,conversation_id=conversation_id)
+            ai_message = await store_chat(session=session,message=ai_msg,conversation_id=conversation_id)
             chat = ChatMessages(id=ai_message.id,role=ai_message.role,content=ai_message.content,sent_at=ai_message.sent_at)
             print(chat)
             await websocket.send_json({

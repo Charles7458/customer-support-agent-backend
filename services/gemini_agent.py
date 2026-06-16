@@ -1,10 +1,8 @@
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
-from .tools import get_faq_declaration, get_order_declaration, create_ticket_declaration
-from ..models import Tracking, OrderCard, Content, ChatMessages, ChatHistoryResponse, UserRole
+from .tools import get_faq_declaration, get_recent_order_declaration, create_ticket_declaration, get_order_by_id_declaration, get_order_by_month_declaration, get_tracking_updates_declaration
 
 
 load_dotenv()
@@ -35,17 +33,25 @@ response_json_schema = {
                 }
             }
         },
-        "order_card" : {
-            "type" : "object",
-            "description" : "Object containing order id and status. Added if user wants information on an order.",
-            "properties" : {
-                "order_id": {
-                    "type" : "string",
-                    "description" : "ID of the corresponding order"
-                },
-                "status" : {
-                    "enum" : ["Ordered", "Packed", "Shipped", "Out for Delivery", "Delivered"],
-                    "description": "Status of the order."
+        "order_cards" : {
+
+            "type" : "array",
+            "description" : "Use this format if user wants order info. Array of objects containing order_id, product_name and status",
+            "items": {
+                "type" : "object",
+                "properties" : {
+                    "order_id": {
+                        "type" : "string",
+                        "description" : "ID of the corresponding order"
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "description": "Name of the product ordered"
+                    },
+                    "status" : {
+                        "enum" : ["Ordered", "Shipped", "Out for Delivery", "Delivered", "Delivery Failed"],
+                        "description": "Status of the order."
+                    }
                 }
             }
         },
@@ -63,7 +69,13 @@ model = 'gemini-3.1-flash-lite'
 
 client = genai.Client(api_key=gemini_api_key)
 
-tools = types.Tool(function_declarations=[get_faq_declaration, get_order_declaration, create_ticket_declaration])
+tools = types.Tool(function_declarations=[get_faq_declaration, 
+                                          get_recent_order_declaration, 
+                                          create_ticket_declaration,
+                                          get_order_by_id_declaration,
+                                          get_order_by_month_declaration,
+                                          get_tracking_updates_declaration
+                                          ])
 
 tool_routing_config = types.GenerateContentConfig(
     tools=[tools],
@@ -76,13 +88,7 @@ final_json_formatting_config = types.GenerateContentConfig(
     response_json_schema=response_json_schema
 )
 
-def get_content(prompt:str):
-    contents = [
-        types.Content(
-            role="user", parts=[types.Part(text=prompt)]
-        )
-    ]
-    return contents
+
 
 def get_final_response_content(contents:list[types.Content], model_response:str, tool_call:dict[str,any], result):
     function_response_part = types.Part.from_function_response(
@@ -93,3 +99,11 @@ def get_final_response_content(contents:list[types.Content], model_response:str,
     contents.append(model_response) # Append the content from the model's response.
     contents.append(types.Content(role="user", parts=[function_response_part])) # Append the function response
     return contents
+
+def get_function_response_part(tool_call:dict[str,any], result):
+    part = types.Part.from_function_response(
+        name=tool_call['name'],
+        response={"result": result}
+    )
+
+    return [part]

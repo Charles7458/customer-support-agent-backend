@@ -1,13 +1,14 @@
 from typing import Literal
 from ..database import SessionDep
 from sqlmodel import select, and_
-from ..models import Tickets, Faqs, Orders, Tracking, AgentOrderResponse
+from ..models import Tickets, Faqs, Orders, Tracking, AgentOrderResponse, TrackingResponse
 from fastapi import Cookie
 from ..routes.auth import get_uuid
 from ..services.conversations import create_ticket_conversation
 from ..routes.tickets import find_support_agent
-import datetime
+from datetime import datetime
 import nanoid
+from ..config import logger
 
 Priority = Literal['low' ,'medium' , 'high']
 
@@ -54,7 +55,7 @@ get_order_by_id_declaration = {
         "properties": {
             "order_id": {
                 "type": "string",
-                "description": "Order ID of the specific order"
+                "description": "Order ID of the specific order. Order id starts with '#'"
             }
         },
         
@@ -70,7 +71,7 @@ get_tracking_updates_declaration = {
         "properties": {
             "order_id" : {
                 "type": "string",
-                "description": "Order ID of the order"
+                "description": "Order ID of the order. Starts with '#' eg. '#C6Thu322W5Q1M''"
             }
         },
         
@@ -140,7 +141,7 @@ async def get_recent_orders(session:SessionDep, support_session:str = Cookie(Non
         return orders
     
     except Exception as e:
-        print("agent failed to get recent orders")
+        logger.error("agent failed to get recent orders", exc_info=True)
         print(e)
         return "tool call failed"
 
@@ -175,8 +176,8 @@ async def get_orders_by_month(month:int, year:int, session:SessionDep, support_s
             orders.append(order)
         
         return orders
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("Get orders by month failed", exc_info=True)
         return "tool call failed"
     
 async def get_order_by_id(order_id:str, session:SessionDep, support_session:str = Cookie(None)):
@@ -191,16 +192,20 @@ async def get_tracking_updates(order_id: str,session:SessionDep, support_session
         if order is None:
             return "Order does not exist"
         tracking_id = order.tracking_id
-        results = await session.exec(select(Tracking.updates, Tracking.updated_at.label("timestamp")).select_from(Tracking).where(Tracking.order_id==order_id).order_by(Tracking.id))
-        updates = results.all()
+        results = await session.exec(select(Tracking.updates, Tracking.carrier, Tracking.updated_at.label("timestamp")).select_from(Tracking).where(Tracking.order_id==order_id).order_by(Tracking.id))
+        updates = []
+        carrier = ""
+        for row in results.all():
+            updates.append(TrackingResponse(updates=row.updates, timestamp=row.timestamp).model_dump(mode='json'))
+            carrier = row.carrier
 
         return {
             "tracking_id": tracking_id,
-            "carrier": updates[0].carrier,
+            "carrier": carrier,
             "updates" : updates
         }
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("Agent failed to fetch tracking updates", exc_info=True)
         return "Couldn't fetch order updates"
 
     
@@ -231,7 +236,6 @@ async def create_a_ticket(issue:str,priority:Priority, last_message_id:int, sess
         await session.commit()
         await session.refresh(ticket)
         return ticket.model_dump(mode='json')
-    except Exception as e:
-        print("Gemini agent couldn't create ticket!!!")
-        print(e)
+    except Exception:
+        logger.error("Gemini agent couldn't create ticket!!!",exc_info=True)
         return "Couldn't create ticket"

@@ -173,3 +173,7 @@ class AgentOrderResponse(BaseModel):
     order_id: str
     product_name:str
     status: OrderStatus
+
+class TrackingResponse(BaseModel):
+    updates: str
+    timestamp: datetime

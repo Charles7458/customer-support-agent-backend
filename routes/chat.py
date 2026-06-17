@@ -9,6 +9,8 @@ from sqlmodel import select
 from sqlalchemy.exc import NoResultFound
 from ..services.conversations import create_conversation
 from ..models import Content, ChatMessages, ChatHistoryResponse, UserRole
+from ..config import logger
+import json
 
 router = APIRouter(prefix="/chat")
 
@@ -68,8 +70,8 @@ async def get_ai_chat(session:SessionDep,support_session:str = Cookie(None)):
             "conversation": conversation,
             "messages" : []
         }
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("Get AI chat history Failed",exc_info=True)
         raise HTTPException(status_code=404, detail="Chat history not found")
     
     
@@ -81,65 +83,77 @@ async def get_ai_chat(session:SessionDep,support_session:str = Cookie(None)):
 @router.websocket("/ws")
 async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_session:str = Cookie(None)):
     await websocket.accept()
+    user_id = await get_uuid(support_session=support_session)
+
     try:    
         if(support_session is None):
             print("Cookie not found")
         while True:
+            try:
+                await websocket.send_json({
+                    "type": "status",
+                    "value": "online"
+                })
 
-            await websocket.send_json({
-                "type": "status",
-                "value": "online"
-            })
+                conversation_id = 'conv-'+user_id
 
-            user_id = await get_uuid(support_session=support_session)
-            conversation_id = 'conv-'+user_id
+                data: dict[str,str] = await websocket.receive_json()
+                # data => {"type": "message", "value": message}
+                user_message = data["value"]
+                print("user message: ", user_message)
 
-            data: dict[str,str] = await websocket.receive_json()
-            # data => {"type": "message", "value": message}
-            user_message = data["value"]
-            print("user message: ", user_message)
+                user_msg = ChatMessages(role=UserRole.CUSTOMER, content=user_message["content"], sent_at=user_message["sent_at"])
+                user_message = await store_chat(session, user_msg, conversation_id)
+                user_message = ChatMessages(id=user_message.id,role=user_message.role,content=user_message.content,sent_at=user_message.sent_at)
+                
+                #Send user's message back to frontend
+                await websocket.send_json({
+                    "type": "message",
+                    "value": user_message.model_dump(mode="json")
+                })
 
-            user_msg = ChatMessages(role=UserRole.CUSTOMER, content=user_message["content"], sent_at=user_message["sent_at"])
-            user_message = await store_chat(session, user_msg, conversation_id)
-            user_message = ChatMessages(id=user_message.id,role=user_message.role,content=user_message.content,sent_at=user_message.sent_at)
-            
-            #Send user's message back to frontend
-            await websocket.send_json({
-                "type": "message",
-                "value": user_message.model_dump(mode="json")
-            })
+                await websocket.send_json({
+                    "type": "status",
+                    "value": "typing"
+                })
 
-            await websocket.send_json({
-                "type": "status",
-                "value": "typing"
-            })
+                output = await generate_response(text=user_message.content.text, user_message_id=user_message.id, conversation_id=conversation_id, session=session, support_session=support_session)
 
-            output = await generate_response(text=user_message.content.text, user_message_id=user_message.id, conversation_id=conversation_id, session=session, support_session=support_session)
+                if output is not None:
+                    print(output)
+                    ai_msg = ChatMessages(role=UserRole.AI, content=output.model_dump())
+                else:
+                    ai_msg = ChatMessages(role=UserRole.AI, content = Content(text="Sorry, we ran into a problem while processing your query. Please try again."))
 
-            if output is not None:
-                print(output)
-                ai_msg = ChatMessages(role=UserRole.AI, content=output.model_dump())
-            else:
-                ai_msg = ChatMessages(role=UserRole.AI, content = Content(text="Sorry, we ran into a problem while processing your query. Please try again."))
-
-            ai_message = await store_chat(session=session,message=ai_msg,conversation_id=conversation_id)
-            chat = ChatMessages(id=ai_message.id,role=ai_message.role,content=ai_message.content,sent_at=ai_message.sent_at)
-            print(chat)
-            await websocket.send_json({
-                "type": "status",
-                "value": "stopped"
-            })
-            #Send AI output
-            await websocket.send_json({
-                "type": "message",
-                "value":chat.model_dump(mode="json")
-            })
+                ai_message = await store_chat(session=session,message=ai_msg,conversation_id=conversation_id)
+                chat = ChatMessages(id=ai_message.id,role=ai_message.role,content=ai_message.content,sent_at=ai_message.sent_at)
+                print(chat)
+                await websocket.send_json({
+                    "type": "status",
+                    "value": "stopped"
+                })
+                #Send AI output
+                await websocket.send_json({
+                    "type": "message",
+                    "value":chat.model_dump(mode="json")
+                })
 
 
     
-    except WebSocketDisconnect:
-        print("Client Disconnected")
+            except WebSocketDisconnect:
+                logger.info("Client Disconnected")
+                break
+
+            except Exception as e:
+                # Catch logic/database/agent errors
+                logger.error(f"Error processing message for {user_id}: {e}", exc_info=True)
+                # Send error back to client so UI can react
+                await websocket.send_text(json.dumps({"error": "Failed to process message."}))
         
+    finally:
+        # Cleanup: This runs even if the loop crashes or the client disconnects
+        logger.info(f"Cleaning up resources for {user_id}.")
+        await websocket.close()
 
 
         

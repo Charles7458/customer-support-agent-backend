@@ -8,6 +8,7 @@ from ..services.conversations import create_ticket_conversation
 from .auth import get_uuid,get_current_user
 from datetime import datetime
 from pydantic import BaseModel
+from ..config import logger
 
 router = APIRouter(prefix="/tickets")
 
@@ -43,6 +44,10 @@ class TicketUpdateRequest(BaseModel):
     issue: str
     status: TicketStatus
     priority: TicketPriority
+
+class ResponseGenRequest(BaseModel):
+    prompt:str
+    message:str
 
 @router.get("/")
 async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:TicketStatus | None = None, priority: TicketPriority | None = None, page:int = 1, per_page:int = 10, support_session:str = Cookie(None)):
@@ -148,8 +153,8 @@ async def get_tickets(session:SessionDep, search:str | None = None, tkt_status:T
                 "ticket_list": ticket_list
             }
 
-    except Exception as e:
-        print(f"Database extraction failure: {e}")
+    except Exception:
+        logger.error("Get Tickets Failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server transaction error")
  
 @router.get("/support/")
@@ -267,6 +272,7 @@ async def get_agent_tickets(session:SessionDep, search:str | None = None, tkt_st
 
         except Exception as e:
             print(f"Database extraction failure: {e}")
+            logger.error("Get Tickets for agent failed", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server transaction error")
 
 # Ticket creation for customers
@@ -427,4 +433,16 @@ async def find_support_agent(session:SessionDep):
 
     except Exception as e:
         print(f"Agent routing calculation failed: {e}")
+        logger.error("Finding support agent failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to calculate agent availability matrix")
+
+
+@router.post("/generate-response")
+async def generate_ai_response(input:ResponseGenRequest, support_session:str = Cookie(None)):
+    from ..services.orchestrate import generate_message_response
+
+    role = get_current_user(support_session)
+    response = await generate_message_response(prompt=input.prompt, message=input.message, role=role)
+    return {
+        "response": response
+    }

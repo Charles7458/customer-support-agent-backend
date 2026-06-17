@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi import Depends
 from typing import Annotated
-
+from .config import logger
 
 load_dotenv()
 
@@ -23,6 +23,7 @@ async def get_session():
             yield session
             await session.commit()
         except Exception:
+            logger.error("Get db session failed", exc_info=True)
             await session.rollback()
             raise
         finally:

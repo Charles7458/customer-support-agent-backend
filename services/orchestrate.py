@@ -1,7 +1,7 @@
 
 from .gemini_agent import client,model,tool_routing_config, final_json_formatting_config, get_function_response_part
 from google.genai import types
-from .prompt import generate_prompt
+from .prompt import generate_prompt, generate_message_prompt
 from .tools import get_faqs, get_recent_orders, get_orders_by_month, get_order_by_id, get_tracking_updates, create_a_ticket
 from ..routes.auth import get_uuid
 from ..database import SessionDep
@@ -11,6 +11,7 @@ from fastapi import Cookie
 from functools import partial
 
 from sqlalchemy import select, desc
+from ..config import logger
 
 async def get_conversation_history(conversation_id: str, session: SessionDep, limit: int = 3):
     # Fetch the last N messages for the conversation
@@ -36,6 +37,7 @@ async def execute_tool_by_name(name: str, user_message_id:int, args:dict[str,str
         return response
     except Exception as e:
         print(e)
+        logger.error("Agent Failed to call tool: "+name, exc_info=True)
         return name+" function call failed"
 
 
@@ -136,3 +138,15 @@ async def generate_response(text:str, user_message_id:int, conversation_id: str,
             
     return Content(text="Agent reached maximum steps without resolution")
     
+async def generate_message_response(prompt:str,message:str, role:str):
+    content = types.Content(
+            role="user", parts=[types.Part(text=generate_message_prompt(prompt, message, role))]
+        )
+    
+    #generate response
+    response = client.models.generate_content(
+            model=model,
+            contents= content
+        )
+
+    return response.text

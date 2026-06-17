@@ -6,6 +6,8 @@ from ..models import Conversations, Messages, ChatMessages
 from sqlmodel import select
 from pydantic import BaseModel, TypeAdapter
 from datetime import datetime
+from ..config import logger
+import json
 
 router = APIRouter(prefix="/support-chat")
 
@@ -66,65 +68,76 @@ async def store_chat(conversation_id:str,message:Messages, session:SessionDep):
 
 @router.websocket("/ws/{conversation_id}")
 async def support_chat(conversation_id:str, websocket:WebSocket, session:SessionDep, support_session:str = Cookie(None)):
+
     id = await get_uuid(support_session)
     await manager.connect(id,websocket)
     role = get_current_user(support_session)["user"].role
     other_id = ""
     try:
         while True:
-            print("Received conv-id:", conversation_id)
-                
-            if(role=="CUSTOMER"):
-                print("customer is online")
-                other_id_res = await session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id))
-                other_id = other_id_res.one()
-            elif(role=="SUPPORT_AGENT"):
-                print("agent is online")
-                other_id_res = await session.exec(select(Conversations.customer_id).where(Conversations.id == conversation_id))
-                other_id = other_id_res.one()
-            else:
-                print("unknown is online")
-                other_id_res = await session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id))
-                other_id = other_id_res.one()
-                
-            print("other id:",other_id)
-            # sending the other person's online status
-            online_status = "online" if(manager.isOnline(other_id)) else "offline"
-            print("other person is", online_status)
-            await websocket.send_json({
-                "type":"status",
-                "value": online_status
-            })
-            #notifying the other person that this person is online, if the other person is also online
-            if(online_status=="online"):
-                await manager.send_status(other_id, "online")
-
-            data = await websocket.receive_json()
-            print(data)
-            #Send status updates to the other person
-            if data["type"] == "status":
-                await manager.send_status(other_id, data["value"])
-
-            elif data["type"] == "message":
-                user_message = data["value"]
-                message = Messages(conversation_id=conversation_id,role=user_message["role"], content=user_message["content"], sent_at=user_message["sent_at"])
-                message = await store_chat(conversation_id=conversation_id, message=message,session=session)
-                chat = ChatMessages(id=message.id,role=message.role,content=message.content,sent_at=message.sent_at)
-                print(chat)
-                #Send message back to the sender
+            try:              
+                if(role=="CUSTOMER"):
+                    print("customer is online")
+                    other_id_res = await session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id))
+                    other_id = other_id_res.one()
+                elif(role=="SUPPORT_AGENT"):
+                    print("agent is online")
+                    other_id_res = await session.exec(select(Conversations.customer_id).where(Conversations.id == conversation_id))
+                    other_id = other_id_res.one()
+                else:
+                    print("unknown is online")
+                    other_id_res = await session.exec(select(Conversations.agent_id).where(Conversations.id==conversation_id))
+                    other_id = other_id_res.one()
+                    
+                print("other id:",other_id)
+                # sending the other person's online status
+                online_status = "online" if(manager.isOnline(other_id)) else "offline"
+                print("other person is", online_status)
                 await websocket.send_json({
-                    "type": "message",
-                    "value": chat.model_dump(mode="json")
+                    "type":"status",
+                    "value": online_status
                 })
-                #Send message to the receiver
-                await manager.send_message(other_id,chat)
+                #notifying the other person that this person is online, if the other person is also online
+                if(online_status=="online"):
+                    await manager.send_status(other_id, "online")
 
-            
+                data = await websocket.receive_json()
+                print(data)
+                #Send status updates to the other person
+                if data["type"] == "status":
+                    await manager.send_status(other_id, data["value"])
 
-    except WebSocketDisconnect:
-        manager.disconnect(id)
+                elif data["type"] == "message":
+                    user_message = data["value"]
+                    message = Messages(conversation_id=conversation_id,role=user_message["role"], content=user_message["content"], sent_at=user_message["sent_at"])
+                    message = await store_chat(conversation_id=conversation_id, message=message,session=session)
+                    chat = ChatMessages(id=message.id,role=message.role,content=message.content,sent_at=message.sent_at)
+                    print(chat)
+                    #Send message back to the sender
+                    await websocket.send_json({
+                        "type": "message",
+                        "value": chat.model_dump(mode="json")
+                    })
+                    #Send message to the receiver
+                    await manager.send_message(other_id,chat)
+                
+            except WebSocketDisconnect:
+                logger.info("Client Disconnected")
+                manager.disconnect(id)
+                break
+
+            except Exception:
+                logger.error("Exception in support chat", exc_info=True)
+                await websocket.send_text(json.dumps({"error": "Failed to process message."}))
+
+    finally:
+        logger.info("Cleaning up resources for"+id)
+        await websocket.close()
         if(other_id and manager.isOnline(other_id)):
-            await manager.send_status(other_id, "offline")
+            await manager.send_status(other_id=other_id,status="offline")
+
+
+
 
 
 @router.post("/")
@@ -148,8 +161,8 @@ async def fetch_support_chat(convID:ConvID, session:SessionDep, support_session:
             "messages": validated_chats
         }
     
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("Get Support chat history failed",exc_info=True)
         raise HTTPException(status_code=404, detail="Chat history not found")
 
     

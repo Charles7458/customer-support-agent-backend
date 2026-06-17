@@ -10,6 +10,7 @@ from .routes.chat import router as chat_router
 from .routes.tickets import router as ticket_router
 from .routes.support_chat import router as support_chat_router
 from .routes.orders import router as order_router
+from .routes.faq import router as faq_router
 
 load_dotenv()
 
@@ -21,6 +22,7 @@ app.include_router(chat_router)
 app.include_router(ticket_router)
 app.include_router(support_chat_router)
 app.include_router(order_router)
+app.include_router(faq_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,7 +35,6 @@ app.add_middleware(
 db_url = os.getenv("ASYNC_DB_URL")
 
 engine = create_async_engine(db_url, echo=True)
-
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)

@@ -12,6 +12,7 @@ import jwt
 import uuid
 import random
 from enum import Enum
+from ..config import logger
 
 load_dotenv()
 
@@ -100,8 +101,8 @@ async def authenticate_user(login:LoginForm, session: SessionDep) -> TokenData:
             return TokenData(full_name=user.full_name, uuid=user.id, email=user.email,role=user.user_role)
         print("wrong password")
         return None
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("User authentication failed",exc_info=True)
         return None
     
 def get_hashed_password(password:str):
@@ -127,6 +128,7 @@ async def get_uuid(support_session: str = Cookie(None)) -> str:
         return user_data.get("sub")
     
     except Exception as e:
+        logger.error("Get uuid failed", exc_info=True)
         print(e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -160,9 +162,9 @@ def get_current_user(support_session: str = Cookie(None)):
         return {"user": user}
 
         
-    except Exception as e:
+    except Exception:
         # If the token was tampered with, expired, or encrypted with a different key
-        print(e)
+        logger.error("Get current user failed", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or corrupted session token."
@@ -216,8 +218,8 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
 
         return {"message": "Successful", "user": user}
     
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("Signup failed",exc_info=True)
         response.status_code = 500
         return {"message": "Server Error"}
     
@@ -341,8 +343,8 @@ async def support_signup(user:SupportSignup, response:Response, session:SessionD
 
         return {"message": "Successful", "user": user}
     
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.error("Support Signup Failed", exc_info=True)
         response.status_code = 500
         return {"message": "Server Error"}
 

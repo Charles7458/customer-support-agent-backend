@@ -1,15 +1,15 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Cookie, HTTPException
-from ..services.prompt import redact_pii
-from ..services.orchestrate import generate_response
-from ..database import SessionDep
-from ..models import Messages, Conversations
-from ..routes.auth import get_uuid
+from services.prompt import redact_pii
+from services.orchestrate import generate_response
+from database import SessionDep
+from models import Messages, Conversations
+from routes.auth import get_uuid
 from pydantic import TypeAdapter
 from sqlmodel import select
 from sqlalchemy.exc import NoResultFound
-from ..services.conversations import create_conversation
-from ..models import Content, ChatMessages, ChatHistoryResponse, UserRole
-from ..config import logger
+from services.conversations import create_conversation
+from models import Content, ChatMessages, ChatHistoryResponse, UserRole
+from config import logger
 import json
 
 router = APIRouter(prefix="/chat")

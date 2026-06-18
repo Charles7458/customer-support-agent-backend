@@ -1,14 +1,14 @@
 from typing import Literal
-from ..database import SessionDep
+from database import SessionDep
 from sqlmodel import select, and_
-from ..models import Tickets, Faqs, Orders, Tracking, AgentOrderResponse, TrackingResponse
+from models import Tickets, Faqs, Orders, Tracking, AgentOrderResponse, TrackingResponse
 from fastapi import Cookie
-from ..routes.auth import get_uuid
-from ..services.conversations import create_ticket_conversation
-from ..routes.tickets import find_support_agent
+from routes.auth import get_uuid
+from services.conversations import create_ticket_conversation
+from routes.tickets import find_support_agent
 from datetime import datetime
 import nanoid
-from ..config import logger
+from config import logger
 
 Priority = Literal['low' ,'medium' , 'high']
 

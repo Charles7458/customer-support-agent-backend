@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Cookie, HTTPException, status
-from ..database import SessionDep
-from ..models import Tickets, TicketCreateRequest, SupportTicketCreateRequest, TicketPriority
-from ..models import Users, Conversations, Messages, Content, TicketStatus
+from database import SessionDep
+from models import Tickets, TicketCreateRequest, SupportTicketCreateRequest, TicketPriority
+from models import Users, Conversations, Messages, Content, TicketStatus
 from sqlmodel import select, func, and_, col
 import nanoid
-from ..services.conversations import create_ticket_conversation
-from .auth import get_uuid,get_current_user
+from services.conversations import create_ticket_conversation
+from auth import get_uuid,get_current_user
 from datetime import datetime
 from pydantic import BaseModel
-from ..config import logger
+from config import logger
 
 router = APIRouter(prefix="/tickets")
 

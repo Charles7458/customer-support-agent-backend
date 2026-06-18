@@ -1,8 +1,8 @@
 
 from fastapi import APIRouter, Cookie, HTTPException, status
-from ..models import Faqs
-from ..database import SessionDep
-from .auth import get_current_user
+from models import Faqs
+from database import SessionDep
+from auth import get_current_user
 
 router = APIRouter(prefix="/faq")
 

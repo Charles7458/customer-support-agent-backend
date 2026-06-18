@@ -1,5 +1,5 @@
-from ..models import Users, Conversations,Tickets
-from ..database import SessionDep
+from models import Users, Conversations,Tickets
+from database import SessionDep
 from sqlmodel import select
 import uuid
 

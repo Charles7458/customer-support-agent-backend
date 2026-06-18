@@ -1,9 +1,9 @@
-from ..database import SessionDep
+from database import SessionDep
 from pydantic import BaseModel
 from fastapi import APIRouter, Cookie, status, HTTPException, Response
-from ..models import Users
+from models import Users
 from sqlmodel import select, func
-from .auth import authenticate_user, LoginForm, get_current_user, get_uuid, get_hashed_password, create_access_token, cookie_name, TokenData, UserData
+from auth import authenticate_user, LoginForm, get_current_user, get_uuid, get_hashed_password, create_access_token, cookie_name, TokenData, UserData
 from datetime import datetime, timezone
 
 class PswdUpdateForm(BaseModel):

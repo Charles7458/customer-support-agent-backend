@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi import Depends
 from typing import Annotated
-from .config import logger
+from config import logger
 
 load_dotenv()
 

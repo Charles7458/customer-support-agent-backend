@@ -4,13 +4,13 @@ from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import create_async_engine
 import os
 from dotenv import load_dotenv
-from .routes.auth import router as auth_router
-from .routes.users import router as user_router
-from .routes.chat import router as chat_router
-from .routes.tickets import router as ticket_router
-from .routes.support_chat import router as support_chat_router
-from .routes.orders import router as order_router
-from .routes.faq import router as faq_router
+from routes.auth import router as auth_router
+from routes.users import router as user_router
+from routes.chat import router as chat_router
+from routes.tickets import router as ticket_router
+from routes.support_chat import router as support_chat_router
+from routes.orders import router as order_router
+from routes.faq import router as faq_router
 
 load_dotenv()
 

@@ -1,10 +1,10 @@
-from ..database import SessionDep
-from ..models import  Orders, Tracking, Users
+from database import SessionDep
+from models import  Orders, Tracking, Users
 from fastapi import APIRouter, Cookie, HTTPException, status
 from sqlmodel import select
 import nanoid
-from ..config import logger
-from .auth import get_current_user
+from config import logger
+from auth import get_current_user
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/orders")

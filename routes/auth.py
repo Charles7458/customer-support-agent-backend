@@ -1,6 +1,6 @@
-from ..database import SessionDep
+from database import SessionDep
 from pydantic import BaseModel
-from ..models import Users
+from models import Users
 from sqlmodel import func, select
 from fastapi import APIRouter, Response, Cookie, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -12,7 +12,7 @@ import jwt
 import uuid
 import random
 from enum import Enum
-from ..config import logger
+from config import logger
 
 load_dotenv()
 

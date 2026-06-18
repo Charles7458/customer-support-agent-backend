@@ -1,12 +1,12 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Cookie, HTTPException, status
-from ..database import SessionDep
-from .auth import get_uuid, get_current_user
+from database import SessionDep
+from auth import get_uuid, get_current_user
 import uuid
-from ..models import Conversations, Messages, ChatMessages
+from models import Conversations, Messages, ChatMessages
 from sqlmodel import select
 from pydantic import BaseModel, TypeAdapter
 from datetime import datetime
-from ..config import logger
+from config import logger
 import json
 
 router = APIRouter(prefix="/support-chat")

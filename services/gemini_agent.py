@@ -2,7 +2,7 @@ from google import genai
 from google.genai import types
 import os
 from dotenv import load_dotenv
-from tools import get_faq_declaration, get_recent_order_declaration, create_ticket_declaration, get_order_by_id_declaration, get_order_by_month_declaration, get_tracking_updates_declaration
+from services.tools import get_faq_declaration, get_recent_order_declaration, create_ticket_declaration, get_order_by_id_declaration, get_order_by_month_declaration, get_tracking_updates_declaration
 
 
 load_dotenv()

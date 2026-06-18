@@ -1,6 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Cookie, HTTPException, status
 from database import SessionDep
-from auth import get_uuid, get_current_user
+from routes.auth import get_uuid, get_current_user
 import uuid
 from models import Conversations, Messages, ChatMessages
 from sqlmodel import select

@@ -1,8 +1,8 @@
 
 from gemini_agent import client,model,tool_routing_config, final_json_formatting_config, get_function_response_part
 from google.genai import types
-from prompt import generate_prompt, generate_message_prompt
-from tools import get_faqs, get_recent_orders, get_orders_by_month, get_order_by_id, get_tracking_updates, create_a_ticket
+from services.prompt import generate_prompt, generate_message_prompt
+from services.tools import get_faqs, get_recent_orders, get_orders_by_month, get_order_by_id, get_tracking_updates, create_a_ticket
 from routes.auth import get_uuid
 from database import SessionDep
 import json

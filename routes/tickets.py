@@ -5,7 +5,7 @@ from models import Users, Conversations, Messages, Content, TicketStatus
 from sqlmodel import select, func, and_, col
 import nanoid
 from services.conversations import create_ticket_conversation
-from auth import get_uuid,get_current_user
+from routes.auth import get_uuid,get_current_user
 from datetime import datetime
 from pydantic import BaseModel
 from config import logger

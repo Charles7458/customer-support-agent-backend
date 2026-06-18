@@ -1,3 +1,12 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -6,8 +15,9 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
-.venv
-
 # Environment variables
 .env
+
+# IDE files
+.vscode/
+.idea/

@@ -18,16 +18,16 @@ async_session_factory = sessionmaker(
 )
 
 async def get_session():
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception as e:
-            logger.error("Get db session failed")
-            print(e)
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    session = async_session_factory()
+    try:
+        yield session
+        await session.commit()
+    except Exception as e:
+        logger.error("Get db session failed")
+        logger.error(e)
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

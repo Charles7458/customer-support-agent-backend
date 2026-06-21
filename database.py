@@ -22,8 +22,9 @@ async def get_session():
         try:
             yield session
             await session.commit()
-        except Exception:
-            logger.error("Get db session failed", exc_info=True)
+        except Exception as e:
+            logger.error("Get db session failed")
+            print(e)
             await session.rollback()
             raise
         finally:

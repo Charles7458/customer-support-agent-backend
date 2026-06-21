@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status, APIRouter
 from sqlalchemy import text
-from sqlalchemy.orm import Session
-from database import SessionLocal  # Import your SessionLocal class
+from sqlmodel.ext.asyncio.session import AsyncSession
+from database import get_session  # Import your SessionLocal class
 
 router = APIRouter()
 
@@ -12,10 +12,10 @@ async def db_health_check():
     Attempts a basic query to ensure the DB is responsive.
     """
     # Create a new session instance
-    db: Session = SessionLocal()
+    db: AsyncSession = await get_session()
     try:
         # Execute a simple, lightweight query to test the connection
-        db.execute(text("SELECT 1"))
+        await db.execute(text("SELECT 1"))
         return {
             "status": "healthy", 
             "database": "connected"
@@ -28,4 +28,4 @@ async def db_health_check():
         )
     finally:
         # Always close the session to prevent connection leaks
-        db.close()
+        await db.close()

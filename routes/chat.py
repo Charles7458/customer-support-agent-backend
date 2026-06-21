@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Cookie, HTTPException
-from services.prompt import redact_pii
+# from services.prompt import redact_pii
 from services.orchestrate import generate_response
 from database import SessionDep
 from models import Messages, Conversations
@@ -35,10 +35,10 @@ router = APIRouter(prefix="/chat")
 
 # manager = ConnectionManager()
 
-@router.post("/redact")
-def redact_chat(chat:dict[str,str]):
-    redacted = redact_pii(chat["input"])
-    return redacted
+# @router.post("/redact")
+# def redact_chat(chat:dict[str,str]):
+#     redacted = redact_pii(chat["input"])
+#     return redacted
 
 async def store_chat(session:SessionDep, message:ChatMessages, conversation_id: str) -> Messages:
     serializable_content = message.content.model_dump()

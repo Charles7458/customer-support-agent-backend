@@ -1,14 +1,14 @@
 # For Presidio
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine, OperatorConfig
-from pydantic import BaseModel
+# from presidio_analyzer import AnalyzerEngine
+# from presidio_anonymizer import AnonymizerEngine, OperatorConfig
+# from pydantic import BaseModel
 
-analyzer = AnalyzerEngine()
+# analyzer = AnalyzerEngine()
 
-anonymizer = AnonymizerEngine()
+# anonymizer = AnonymizerEngine()
 
-class PromptResult(BaseModel):
-    redacted_prompt: str | None
+# class PromptResult(BaseModel):
+#     redacted_prompt: str | None
 
 
 # chat_input = """Hi,  my order has not yet arrived. Order number: #ORD-15375S628
@@ -20,13 +20,13 @@ class PromptResult(BaseModel):
 # print(anonymizer.anonymize(chat_input, results))
 
 
-def redact_pii(text:str) -> str | None:
-    results = analyzer.analyze(text,language="en")
-    pii_count = len(results)
-    if(pii_count == 0):
-        return text
-    else:
-        return anonymizer.anonymize(text=text, analyzer_results=results,operators={"DATE_TIME": OperatorConfig("keep")}).text
+# def redact_pii(text:str) -> str | None:
+#     results = analyzer.analyze(text,language="en")
+#     pii_count = len(results)
+#     if(pii_count == 0):
+#         return text
+#     else:
+#         return anonymizer.anonymize(text=text, analyzer_results=results,operators={"DATE_TIME": OperatorConfig("keep")}).text
     
 
 

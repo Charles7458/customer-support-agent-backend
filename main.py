@@ -11,6 +11,7 @@ from routes.tickets import router as ticket_router
 from routes.support_chat import router as support_chat_router
 from routes.orders import router as order_router
 from routes.faq import router as faq_router
+from health import router as health_router
 
 load_dotenv()
 
@@ -23,6 +24,7 @@ app.include_router(ticket_router)
 app.include_router(support_chat_router)
 app.include_router(order_router)
 app.include_router(faq_router)
+app.include_router(health_router)
 
 app.add_middleware(
     CORSMiddleware,

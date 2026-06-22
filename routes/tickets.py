@@ -320,7 +320,8 @@ async def create_ticket_support(ticketRequest:SupportTicketCreateRequest, sessio
             detail="Unauthorized request."
         )
     
-    customer_id = await session.exec(select(Users.id).select_from(Users).where(Users.email==ticketRequest.customer_email)).one()
+    result = await session.exec(select(Users.id).select_from(Users).where(Users.email==ticketRequest.customer_email))
+    customer_id = result.one()
     
 
     print("uuid from create-ticket"+id)

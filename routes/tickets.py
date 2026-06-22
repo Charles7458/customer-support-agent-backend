@@ -440,7 +440,7 @@ async def find_support_agent(session:SessionDep):
 
 @router.post("/generate-response")
 async def generate_ai_response(input:ResponseGenRequest, support_session:str = Cookie(None)):
-    from ..services.orchestrate import generate_message_response
+    from services.orchestrate import generate_message_response
 
     role = get_current_user(support_session)
     response = await generate_message_response(prompt=input.prompt, message=input.message, role=role)

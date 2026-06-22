@@ -209,7 +209,7 @@ async def signup(user: SignUpForm, response:Response, session: SessionDep):
             value=access_token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             max_age=3600,
             path="/"
         )
@@ -251,7 +251,7 @@ async def login(loginForm: LoginForm, response: Response, session:SessionDep):
             value=access_token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             max_age=age,
             path="/"
         )
@@ -334,7 +334,7 @@ async def support_signup(user:SupportSignup, response:Response, session:SessionD
             value=access_token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             max_age=3600,
             path="/"
         )
@@ -380,7 +380,7 @@ async def support_login(form:SupportLogin, response:Response, session:SessionDep
             value=access_token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             max_age=age,
             path="/"
         )

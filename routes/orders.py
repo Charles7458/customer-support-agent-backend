@@ -12,7 +12,7 @@ router = APIRouter(prefix="/orders")
 class OrderRequest(BaseModel):
     customer_email: str
     product_name: str
-    amount: int
+    amount: float
     status: str
 
 class TrackingRequest(BaseModel):

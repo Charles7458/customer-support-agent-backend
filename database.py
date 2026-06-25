@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import text
 from sqlalchemy.orm import sessionmaker
 from fastapi import Depends

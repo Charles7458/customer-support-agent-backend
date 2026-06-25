@@ -69,13 +69,8 @@ async def init_db(wipe_test_data: bool = False):
                 print("🗑️  Wiping test data...")
                 
 
-                # Delete test tickets and referenced conversations
-                await conn.execute(text("""
-                DELETE FROM conversations
-                USING tickets
-                WHERE tickets.conversation_id = conversations.id 
-                AND tickets.issue LIKE 'Sample issue%'
-                """))
+                # Delete test tickets
+                await conn.execute(text("DELETE FROM tickets WHERE tickets.issue LIKE 'Sample issue%'"))
                 
                 # Delete test FAQs (optional)
                 await conn.execute(text("DELETE FROM faqs WHERE question LIKE '%Sample FAQ%'"))

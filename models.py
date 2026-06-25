@@ -114,7 +114,7 @@ class Orders(SQLModel, table=True):
     id: str | None = Field(default_factory = lambda: f"#{nanoid.generate(size=11)}", primary_key=True)
     customer_id : uuid.UUID = Field(foreign_key="users.id")
     product_name: str
-    amount: int
+    amount: float
     status : OrderStatus
     tracking_id : str | None = Field(unique=True)
     order_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc), sa_type=sa.DateTime(timezone=True))

@@ -69,7 +69,7 @@ def upgrade() -> None:
     sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('customer_id', sa.Uuid(), nullable=False),
     sa.Column('product_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('amount', sa.Integer(), nullable=False),
+    sa.Column('amount', sa.Float(), nullable=False),
     sa.Column('status', sa.Enum('Ordered', 'Shipped', 'Out_For_Delivery', 'Delivered', 'Delivery_Failed', name='orderstatus'), nullable=False),
     sa.Column('tracking_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('order_date', sa.DateTime(timezone=True), nullable=True),

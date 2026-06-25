@@ -68,16 +68,14 @@ async def init_db(wipe_test_data: bool = False):
             if wipe_test_data:
                 print("🗑️  Wiping test data...")
                 
-                # Delete test users
+
+                # Delete test tickets and referenced conversations
                 await conn.execute(text("""
                 DELETE FROM conversations
-                USING users
-                WHERE conversations.customer_id = users.id
-                AND users.email LIKE '%.local';"""
-                ))
-
-                # Delete test tickets
-                await conn.execute(text("DELETE FROM tickets WHERE issue LIKE 'Sample issue%'"))
+                USING tickets
+                WHERE tickets.conversation_id = conversations.id 
+                AND tickets.issue LIKE 'Sample issue%'
+                """))
                 
                 # Delete test FAQs (optional)
                 await conn.execute(text("DELETE FROM faqs WHERE question LIKE '%Sample FAQ%'"))
@@ -89,6 +87,14 @@ async def init_db(wipe_test_data: bool = False):
                 WHERE orders.id = tracking.order_id
                 AND orders.product_name LIKE 'Sample test product%';
                 """))
+
+                # Delete test users and their remaining conversations
+                await conn.execute(text("""
+                DELETE FROM conversations
+                USING users
+                WHERE conversations.customer_id = users.id
+                AND users.email LIKE '%.local';"""
+                ))
                 
                 print("✓ Test data wiped")
             

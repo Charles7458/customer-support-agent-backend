@@ -1,5 +1,5 @@
 from database import SessionDep
-from models import  Orders, Tracking, Users
+from models import  Orders, Users
 from fastapi import APIRouter, Cookie, HTTPException, status
 from sqlmodel import select
 import nanoid
@@ -35,6 +35,8 @@ async def create_order(order: OrderRequest, session:SessionDep, support_session:
         order1 = Orders(customer_id=customer_id,product_name=order.product_name,amount=order.amount,tracking_id=tracking_id,status=order.status)
         session.add(order1)
         await session.commit()
+        await session.refresh(order1)
+        return order1
 
     except Exception as e:
         print(e)
@@ -51,6 +53,8 @@ async def create_tracking_update(tracking: TrackingRequest, session:SessionDep, 
     try:
         session.add(tracking)
         await session.commit()
+        await session.refresh(tracking)
+        return tracking
 
     except Exception as e:
         print(e)

@@ -24,9 +24,6 @@ class TrackingRequest(BaseModel):
 
 @router.post("/insert")
 async def create_order(order: OrderRequest, session:SessionDep, support_session:str=Cookie(None)):
-    role = get_current_user(support_session=support_session)["user"].role
-    if(role != 'SUPPORT_AGENT' and role !='ADMIN'):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not allowed to create faq")
 
     try:
         res = session.exec(select(Users.id).where(Users.email==order.customer_email))
@@ -45,10 +42,6 @@ async def create_order(order: OrderRequest, session:SessionDep, support_session:
 
 @router.post("/tracking/insert")
 async def create_tracking_update(tracking: TrackingRequest, session:SessionDep, support_session:str = Cookie(None)):
-
-    role = get_current_user(support_session=support_session)["user"].role
-    if(role != 'SUPPORT_AGENT' and role !='ADMIN'):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not allowed to create faq")
 
     try:
         session.add(tracking)

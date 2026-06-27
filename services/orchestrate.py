@@ -92,20 +92,6 @@ async def generate_response(text:str, user_message_id:int, conversation_id: str,
         print(f"Function to call: {function_call.name}")
         print(f"ID: {function_call.id}")
         print(f"Arguments: {function_call.args}")
-        # result:any
-        # #  Call appropriate function:
-        # if function_call.name == "get_faqs":
-        #     result = await get_faqs(keywords = function_call.args["keywords"], session=session)
-        # elif function_call.name == "get_recent_orders":
-        #     result = await get_recent_orders(user_id=user_id)
-        # elif function_call.name == "get_order_by_month":
-        #     result = await get_orders_by_month(month=function_call.args["month"], year=function_call.args["year"])
-        # elif function_call.name == "get_order_by_id":
-        #     result = await get_order_by_id(order_id=function_call.args["order_id"])
-        # elif function_call.name == "get_tracking_updates":
-        #     result = await get_tracking_updates(order_id=function_call.args["order_id"])
-        # elif function_call.name == "create_a_ticket":
-        #     result = await create_a_ticket(issue=function_call.args["issue"],last_message_id=user_message_id, priority=function_call.args["priority"], session=session, support_session=support_session)
         
         result = await execute_tool_by_name(
             name = function_call.name,
@@ -119,12 +105,6 @@ async def generate_response(text:str, user_message_id:int, conversation_id: str,
             "name": function_call.name,
             "id": function_call.id
         }
-        # history = get_final_response_content(contents=history,model_response= response.candidates[0].content,tool_call=tool_call, result=result)
-        # final_response = client.models.generate_content(
-        #     model=model,
-        #     config=final_json_formatting_config,
-        #     contents=history,
-        # )
         
         # 5. Add the tool result back to history
         # This is the "Agentic" part: The AI now sees the result as part of the context

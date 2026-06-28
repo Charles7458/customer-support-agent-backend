@@ -266,7 +266,7 @@ def logout(response: Response):
     """
     Clears the session cookie from the user's browser.
     """
-    response.delete_cookie(key=cookie_name, path="/")
+    response.delete_cookie(key=cookie_name,samesite="none", path="/")
     return {"message": "Logged out successfully."}
 
 

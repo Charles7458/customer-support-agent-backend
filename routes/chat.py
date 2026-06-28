@@ -102,7 +102,7 @@ async def ai_chat_endpoint(websocket:WebSocket,session:SessionDep, support_sessi
                 user_message = data["value"]
                 print("user message: ", user_message)
 
-                user_msg = ChatMessages(role=UserRole.CUSTOMER, content=user_message["content"], sent_at=user_message["sent_at"])
+                user_msg = ChatMessages(role=user_message["role"], content=user_message["content"], sent_at=user_message["sent_at"])
                 user_message = await store_chat(session, user_msg, conversation_id)
                 user_message = ChatMessages(id=user_message.id,role=user_message.role,content=user_message.content,sent_at=user_message.sent_at)
                 
